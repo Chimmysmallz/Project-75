@@ -580,6 +580,40 @@
 
   .plan-note { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); text-align: center; background: var(--cream-2); padding: 10px 12px; border-radius: 12px; }
 
+  /* Book Vault */
+  .bookvault-card { background: linear-gradient(160deg,#FBF4EE,#F7E9E4); }
+  html[data-theme="dark"] .bookvault-card { background: var(--card); }
+  .book-list { display: flex; flex-direction: column; gap: 10px; }
+  .book-item { display: flex; align-items: stretch; gap: 8px; }
+  .book-row { flex: 1; min-width: 0; display: flex; gap: 12px; text-align: left; background: var(--cream-2); border-radius: var(--radius-sm); padding: 12px; }
+  .book-spine { width: 6px; border-radius: 4px; flex-shrink: 0; background: var(--mauve); }
+  .book-info { flex: 1; min-width: 0; }
+  .book-title { font-size: 15px; font-weight: 700; }
+  .book-sub { font-family: var(--serif); font-style: italic; font-size: 13px; color: var(--rose-deep); margin: 2px 0 6px; }
+  .book-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .book-desc { font-size: 11.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stage-badge { font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; color: #fff; flex-shrink: 0; }
+  .s-idea { background: #B7A6C4; } .s-outline { background: #C9A87A; } .s-draft { background: var(--rose); } .s-edit { background: #D8B36A; } .s-pub { background: #7FB98C; }
+
+  /* Dating — intentional */
+  .dchips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+  .dchip { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 20px; background: var(--cream-2); font-size: 13px; font-weight: 500; }
+  .dchip button { color: var(--muted); font-size: 11px; line-height: 1; }
+  .dchip button:active { color: var(--rose-deep); }
+  .flag-group { margin-top: 12px; }
+  .flag-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 2px; }
+  .flag-head.green { color: #3E8E63; } .flag-head.red { color: #B4485A; }
+  html[data-theme="dark"] .flag-head.green { color: #9BD9B4; } html[data-theme="dark"] .flag-head.red { color: #F0A6B0; }
+  .date-people { display: flex; flex-direction: column; gap: 8px; }
+  .date-person { display: flex; gap: 8px; }
+  .dp-main { flex: 1; min-width: 0; text-align: left; background: var(--cream-2); border-radius: var(--radius-sm); padding: 13px 15px; }
+  .dp-top { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+  .dp-top b { font-size: 15px; }
+  .dp-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; padding: 3px 9px; border-radius: 12px; color: #fff; background: var(--mauve); flex-shrink: 0; }
+  .dp-status.s-dating { background: var(--rose); } .dp-status.s-paused { background: #C9A87A; } .dp-status.s-ended { background: #A29195; }
+  .dp-notes { font-size: 13px; color: var(--ink-2); margin: 6px 0; line-height: 1.5; }
+  .dp-reflect { font-family: var(--serif); font-style: italic; font-size: 12.5px; color: var(--rose-deep); }
+
   @media (min-width: 600px) { .diet-grid { grid-template-columns: repeat(4,1fr); } }
   </style>
 </head>
