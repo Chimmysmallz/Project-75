@@ -60,6 +60,7 @@
       photos: [],
       promises: {},
       water: {},
+      meals: {},
       diet: {
         breakfast: ['Coffee + milk', '2 boiled eggs', '1 apple'],
         lunch: ['2 boiled eggs', '1 pear'],
@@ -186,13 +187,11 @@
     if (dirty) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {} }
   }
 
-  let saveTimer = null;
+  /* Synchronous write — guarantees data is persisted immediately, so nothing
+     is lost when the app is closed or backgrounded right after an edit. */
   function save() {
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-      global.dispatchEvent(new CustomEvent('p75:saved'));
-    }, 120);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    global.dispatchEvent(new CustomEvent('p75:saved'));
   }
 
   function get() { return state || load(); }
