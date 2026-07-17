@@ -125,11 +125,63 @@
   const BOOK_STAGES = ['Idea', 'Outlining', 'Drafting', 'Editing', 'Published'];
   function stageClass(s) { return { Idea: 'idea', Outlining: 'outline', Drafting: 'draft', Editing: 'edit', Published: 'pub' }[s] || 'idea'; }
 
+  /* Tap-to-pick suggestions (so she rarely has to type) */
+  const SUGGEST = {
+    standards: ['Emotionally available', 'Consistent, not confusing', 'Shares my values', 'Financially responsible', 'Kind to everyone', 'Ambitious & driven', 'Communicates honestly', 'Adds peace, not stress', 'Makes me feel safe', 'Respects my time', 'Wants the same future', 'Spiritually aligned'],
+    green: ['Follows through', 'Curious about my world', 'Calm in conflict', 'Reliable', 'Respects my boundaries', 'Consistent effort', 'Emotionally mature', 'A good listener', 'Makes me laugh', 'Encourages my goals'],
+    red: ['Hot and cold', 'Dishonest', 'Disrespectful', 'Avoids commitment', 'Makes me anxious', 'Poor communicator', 'Selfish', 'No ambition', 'Dismisses my feelings', 'Love-bombs then pulls away'],
+    nn: ['No soda', 'No office snacks', 'Protein first', '2 litres of water', 'No late-night eating', 'No fried food', 'Follow today’s plan', 'Weigh weekly only', 'No eating when stressed'],
+    boundaries: ['Protect my evenings', 'No work after 7pm', 'Say no without guilt', 'Limit draining people', 'Phone away at dinner', 'No lending money I need', 'Rest without apologising', 'Reply when I have capacity'],
+    gratitude: ['My health', 'My home', 'My work', 'A good friend', 'My family', 'God', 'A small win today', 'My body', 'Rest', 'This quiet moment'],
+    focus: ['Lose 3kg', 'Save ₦500,000', 'Publish 4 videos', 'Write 20 pages', 'Finish a book chapter', 'Read 2 books', 'Go on 1 intentional date', 'No soda all month', 'Walk 4× a week', 'Meal-prep every Sunday']
+  };
+
+  /* Daily reminder schedule (fires while the app is open/installed) */
+  const REMINDERS = [
+    { id: 'eggs_am', time: '07:00', title: 'Buy today’s eggs & fruit 🥚🍎', body: 'Don’t forget your eggs, an apple and a pear for today. Drink some water too.' },
+    { id: 'soda_am', time: '08:00', title: 'No soda today ☕', body: 'Water or tea on your desk — not a can. You already decided.' },
+    { id: 'water_am', time: '10:00', title: 'Water break 💧', body: 'Drink a full glass now.' },
+    { id: 'noon', time: '12:00', title: 'Midday check 🍎', body: 'Have your fruit and protein. No office snacks.' },
+    { id: 'lunch', time: '13:00', title: 'Lunch, intentionally 🥗', body: 'Protein first. Did you bring yours?' },
+    { id: 'snack_pm', time: '15:00', title: 'Snack o’clock — no thank you 🚫', body: 'Someone’s offering snacks. Water instead. 💧' },
+    { id: 'done_pm', time: '17:00', title: 'Well done 🤍', body: 'You held the line today. Go home, rest, continue.' }
+  ];
+
+  const AFFIRMATIONS = [
+    'You are becoming her, softly.', 'Consistency over perfection.', 'One intentional decision still counts.',
+    'A beautiful life is also a goal.', 'You don’t negotiate with yourself today.', 'Protein first. Water beside you. Continue.',
+    'Missing one day never becomes missing one year.', 'Welcome home. Today still counts.'
+  ];
+  function dailyAffirmation() {
+    const d = new Date(); const doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
+    return AFFIRMATIONS[doy % AFFIRMATIONS.length];
+  }
+
+  /* Reusable suggestion picker — tap chips to add, or type your own. */
+  function openPicker(cfg) {
+    const chips = (cfg.suggestions || []).map(function (s) { return `<button type="button" class="pick-chip" data-pick="${esc(s)}">＋ ${esc(s)}</button>`; }).join('');
+    const ov = openSheet({
+      title: cfg.title, subtitle: cfg.subtitle || 'Tap to add. Add as many as you like.',
+      bodyHTML: `<div class="pick-wrap">${chips}</div><div class="pick-custom"><input type="text" id="pick-input" placeholder="Or write your own…"><button type="button" class="btn ghost small" id="pick-add">Add</button></div>`,
+      submitLabel: cfg.doneLabel || 'Done', onSubmit: function () { closeSheet(); render(); }
+    });
+    const wrap = $('.pick-wrap', ov);
+    wrap.addEventListener('click', function (e) { const b = e.target.closest('[data-pick]'); if (!b || b.disabled) return; cfg.onAdd(b.getAttribute('data-pick')); b.classList.add('added'); b.textContent = '✓ ' + b.getAttribute('data-pick'); b.disabled = true; });
+    const inp = $('#pick-input', ov);
+    function addCustom() { const t = (inp.value || '').trim(); if (!t) return; cfg.onAdd(t); inp.value = ''; const chip = document.createElement('span'); chip.className = 'pick-chip added'; chip.textContent = '✓ ' + t; wrap.appendChild(chip); }
+    $('#pick-add', ov).addEventListener('click', addCustom);
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } });
+  }
+
   /* ============================ Diet ============================ */
   function dietCard() {
     const d = S.get().diet;
+    const m = (S.get().meals || {})[Dates.today()] || {};
     const sec = function (t, items) { return `<div class="diet-sec"><h4>${esc(t)}</h4><ul>${(items || []).map(function (i) { return `<li>${esc(i)}</li>`; }).join('')}</ul></div>`; };
+    const meal = function (k, label) { return `<button class="meal ${m[k] ? 'on' : ''}" data-act="meal" data-m="${k}"><span>${m[k] ? '✓' : ''}</span>${label}</button>`; };
     return card(`${sectionTitle('Today’s diet', `<button class="add-btn" data-act="edit-diet">✎</button>`)}
+      <div class="grocery ${m.groceries ? 'done' : ''}"><span>🥚🍎</span><div><b>Today you need</b>eggs, an apple &amp; a pear</div><button class="btn ghost small" data-act="grocery">${m.groceries ? 'Got them ✓' : 'Mark bought'}</button></div>
+      <div class="meal-ticks">${meal('breakfast', 'Breakfast')}${meal('lunch', 'Lunch')}${meal('dinner', 'Dinner')}</div>
       <div class="diet-grid">${sec('Breakfast', d.breakfast)}${sec('Lunch', d.lunch)}${sec('Dinner — choose one', d.dinner)}${sec('Unlimited', d.unlimited)}</div>
       <p class="muted small">Repetition is the strategy. Fewer decisions, fewer chances to negotiate.</p>`, 'diet-card');
   }
@@ -194,6 +246,8 @@
         <div class="agree-label">Your agreement today</div>
         <ul class="agree-list">${AGREEMENT.map(function (a) { return `<li>${esc(a)}</li>`; }).join('')}</ul>
         <div class="agree-seal">You do not have permission to quit today.</div></div>`, 'agreement-card')}
+
+      <p class="affirmation">${esc(dailyAffirmation())}</p>
 
       ${reached ? card(`<div class="forever-mini"><div class="forever-badge">✦</div>
         <div class="forever-copy"><b>You made it to her.</b><span>Project 75 is now Project Forever.</span></div>
@@ -522,9 +576,9 @@
         <div class="row"><div><b>Height</b><i>${st.profile.heightCm} cm</i></div></div>
         <div class="row"><div><b>Journey</b><i>${st.profile.startWeight}kg → ${st.profile.goalWeight}kg · ${st.profile.targetMonths || 6} months</i></div></div></div>`)}
       ${card(`${sectionTitle('Appearance')}<div class="segmented" data-seg="theme">${['system', 'light', 'dark'].map(function (t) { return `<button class="${s.theme === t ? 'on' : ''}" data-act="set-theme" data-val="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`; }).join('')}</div>`)}
-      ${card(`${sectionTitle('Gentle reminders')}<label class="switch-row"><span>Daily check-in reminder</span><button class="switch ${s.reminders ? 'on' : ''}" data-act="toggle-reminders" role="switch" aria-checked="${s.reminders}"></button></label>
-        <label class="fld inline"><span>Time</span><input type="time" value="${s.reminderTime}" data-act="set-remind-time"></label>
-        <p class="muted small">Reminders show while the app is open or installed. Install to your home screen for the best experience.</p>`)}
+      ${card(`${sectionTitle('Daily reminders')}<label class="switch-row"><span>Turn on reminders</span><button class="switch ${s.reminders ? 'on' : ''}" data-act="toggle-reminders" role="switch" aria-checked="${s.reminders}"></button></label>
+        <div class="reminder-schedule">${REMINDERS.map(function (r) { return `<div class="rem-row"><span class="rem-time">${r.time}</span><span class="rem-text">${esc(r.title)}</span></div>`; }).join('')}</div>
+        <p class="muted small">These pop up while the app is open or installed on your home screen. For pings even when the app is closed, I can also send them to your Teams — just ask.</p>`)}
       ${card(`${sectionTitle('Your data')}<div class="report-btns"><button class="btn ghost" data-act="export-data">Export backup</button><button class="btn ghost" data-act="import-data">Import backup</button></div>
         <p class="muted small">Everything stays on this device. Back up whenever you like.</p><button class="btn ghost danger" data-act="reset-data">Start the space fresh</button>`)}
       <p class="soft-close">A beautiful life is also a goal.</p></div>`;
@@ -541,11 +595,23 @@
   function updatePanic() { const el = $('#panic'); if (el) el.hidden = M.inactiveDays() < 3; }
 
   function render() {
-    const view = $('#view'); view.classList.remove('enter');
+    const view = $('#view');
+    const routeChanged = App._renderedRoute !== App.route;
+    const y = window.scrollY;
+    if (routeChanged) view.classList.remove('enter');
     view.innerHTML = (VIEWS[App.route] || viewToday)();
     loadMediaImages(view); renderTabs(); updatePanic();
-    requestAnimationFrame(function () { view.classList.add('enter'); Charts.animateIn(view); });
-    window.scrollTo({ top: 0, behavior: 'auto' });
+    if (routeChanged) {
+      // New screen: play the entrance animation and start at the top.
+      requestAnimationFrame(function () { view.classList.add('enter'); Charts.animateIn(view); });
+      window.scrollTo(0, 0);
+    } else {
+      // Same screen (a tap/toggle): update in place, keep scroll position, no replay.
+      view.classList.add('enter');
+      Charts.animateIn(view, true);
+      window.scrollTo(0, y);
+    }
+    App._renderedRoute = App.route;
   }
   function go(route) { App.route = route; render(); }
 
@@ -688,7 +754,7 @@
 
       case 'toggle-nn': S.mutate(function () { const n = st.nonNegotiables.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (n) n.active = !n.active; }); render(); break;
       case 'del-nn': S.mutate(function () { st.nonNegotiables = st.nonNegotiables.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
-      case 'add-nn': openSheet({ title: 'A new agreement', fields: [{ name: 'text', label: 'Non-negotiable', placeholder: 'e.g. No late-night scrolling' }], submitLabel: 'Add', onSubmit: function (v) { if (v.text) S.mutate(function () { st.nonNegotiables.push({ id: S.uid(), text: v.text, active: true }); }); closeSheet(); render(); } }); break;
+      case 'add-nn': openPicker({ title: 'Non-negotiables', suggestions: SUGGEST.nn, onAdd: function (t) { S.mutate(function () { st.nonNegotiables.push({ id: S.uid(), text: t, active: true }); }); } }); break;
 
       case 'log-weight': openSheet({ title: 'Log weight', subtitle: 'Weigh weekly only — kindly.', fields: [{ name: 'kg', label: 'Weight (kg)', type: 'number', step: '0.1', value: M.currentWeight() }, { name: 'date', label: 'Date', type: 'date', value: Dates.today() }], submitLabel: 'Save', onSubmit: function (v) { const kg = parseFloat(v.kg); if (!kg) { toast('Enter a number.'); return; } S.mutate(function () { const d = v.date || Dates.today(), ex = st.weights.find(function (w) { return w.date === d; }); if (ex) ex.kg = kg; else st.weights.push({ date: d, kg: kg }); todayP().weighed = true; }); closeSheet(); render(); toast('Logged. The line matters more than the number.'); } }); break;
       case 'add-measurement': openSheet({ title: 'Measurements', subtitle: 'Only what you want.', fields: [{ name: 'waist', label: 'Waist (cm)', type: 'number', step: '0.1' }, { name: 'hips', label: 'Hips (cm)', type: 'number', step: '0.1' }, { name: 'bust', label: 'Bust (cm)', type: 'number', step: '0.1' }, { name: 'thigh', label: 'Thigh (cm)', type: 'number', step: '0.1' }, { name: 'arm', label: 'Arm (cm)', type: 'number', step: '0.1' }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.measurements.push({ date: Dates.today(), waist: num(v.waist), hips: num(v.hips), bust: num(v.bust), thigh: num(v.thigh), arm: num(v.arm) }); }); closeSheet(); render(); } }); break;
@@ -715,8 +781,14 @@
 
       case 'office-lunch': S.mutate(function () { const d = Dates.today(); st.office[d] = st.office[d] || {}; st.office[d].lunch = el.getAttribute('data-v'); }); render(); return true;
       case 'office-nothanks': S.mutate(function () { todayP().noSnacks = true; }); toast('You kept the agreement. 🤍'); render(); return true;
+      case 'meal': { const k = el.getAttribute('data-m'); S.mutate(function () { const t = Dates.today(); st.meals = st.meals || {}; st.meals[t] = st.meals[t] || {}; st.meals[t][k] = !st.meals[t][k]; if (st.meals[t].breakfast && st.meals[t].lunch && st.meals[t].dinner) todayP().diet = true; }); render(); return true; }
+      case 'grocery': S.mutate(function () { const t = Dates.today(); st.meals = st.meals || {}; st.meals[t] = st.meals[t] || {}; st.meals[t].groceries = !st.meals[t].groceries; }); render(); return true;
 
-      case 'add-focus': { const m = M.monthly(); if ((m.focus || []).length >= 3) { openSheet({ title: 'Only three.', subtitle: 'This is the whole point.', bodyHTML: `<p class="ob-copy">Let’s finish these three first. Three intentional goals will change your month more than eleven half-kept ones. 🤍</p>`, submitLabel: 'You’re right', onSubmit: closeSheet }); return true; } openSheet({ title: 'This month’s focus', subtitle: (3 - (m.focus || []).length) + ' of 3 remaining', fields: [{ name: 'title', label: 'One clear goal', placeholder: 'e.g. Lose 3kg' }], submitLabel: 'Add', onSubmit: function (v) { if (v.title) S.mutate(function () { M.monthly().focus.push({ id: S.uid(), title: v.title, done: false }); }); closeSheet(); render(); } }); return true; }
+      case 'add-focus': { const m = M.monthly(); if ((m.focus || []).length >= 3) { openSheet({ title: 'Only three.', subtitle: 'This is the whole point.', bodyHTML: `<p class="ob-copy">Let’s finish these three first. Three intentional goals will change your month more than eleven half-kept ones. 🤍</p>`, submitLabel: 'You’re right', onSubmit: closeSheet }); return true; }
+        openSheet({ title: 'This month’s focus', subtitle: (3 - (m.focus || []).length) + ' of 3 remaining', fields: [{ name: 'template', label: 'Pick a goal', type: 'select', options: ['— choose —'].concat(SUGGEST.focus) }, { name: 'title', label: 'Or write your own' }], submitLabel: 'Add',
+          afterOpen: function (ov) { const sel = $('select[name=template]', ov), inp = $('input[name=title]', ov); if (sel && inp) sel.addEventListener('change', function () { if (sel.value && sel.value !== '— choose —') inp.value = sel.value; }); },
+          onSubmit: function (v) { const t = v.title || (v.template && v.template !== '— choose —' ? v.template : ''); if (t) S.mutate(function () { M.monthly().focus.push({ id: S.uid(), title: t, done: false }); }); closeSheet(); render(); } });
+        return true; }
       case 'toggle-focus': S.mutate(function () { const f = (M.monthly().focus || []).find(function (x) { return x.id === el.getAttribute('data-id'); }); if (f) f.done = !f.done; }); render(); return true;
       case 'del-focus': S.mutate(function () { const m = M.monthly(); m.focus = (m.focus || []).filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
       case 'set-intentional': S.mutate(function () { M.monthly().intentionalSpend = el.getAttribute('data-v'); }); render(); return true;
@@ -734,11 +806,11 @@
       case 'edit-book': { const b = st.content.books.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (!b) return true; openSheet({ title: b.title, subtitle: 'No pressure. Move the stage whenever it’s true.', fields: [{ name: 'title', label: 'Title', value: b.title }, { name: 'subtitle', label: 'Subtitle', value: b.subtitle }, { name: 'stage', label: 'Stage', type: 'select', options: BOOK_STAGES, value: b.stage || 'Idea' }, { name: 'description', label: 'What it’s about', type: 'textarea', rows: 4, value: b.description }, { name: 'notes', label: 'Notes to self', type: 'textarea', rows: 3, value: b.notes }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { b.title = v.title || b.title; b.subtitle = v.subtitle; b.stage = v.stage || b.stage; b.description = v.description; b.notes = v.notes; b.done = (b.stage === 'Published'); }); closeSheet(); render(); } }); return true; }
       case 'del-book': { const bid = el.getAttribute('data-id'); confirmSheet('Remove this book?', 'You can always add it again.', 'Remove', function () { S.mutate(function () { st.content.books = st.content.books.filter(function (x) { return x.id !== bid; }); }); render(); }, true); return true; }
 
-      case 'add-standard': quickAdd('What I want', 'A standard or non-negotiable', function (t) { ensureDating(st).standards.push({ id: S.uid(), text: t }); }); return true;
+      case 'add-standard': openPicker({ title: 'My standards', subtitle: 'Tap what you want and won’t compromise.', suggestions: SUGGEST.standards, onAdd: function (t) { S.mutate(function () { ensureDating(st).standards.push({ id: S.uid(), text: t }); }); } }); return true;
       case 'del-standard': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.standards = d.standards.filter(function (x) { return x.id !== id; }); }); render(); return true; }
-      case 'add-green': quickAdd('Green flag', 'What to look for', function (t) { ensureDating(st).green.push({ id: S.uid(), text: t }); }); return true;
+      case 'add-green': openPicker({ title: 'Green flags', suggestions: SUGGEST.green, onAdd: function (t) { S.mutate(function () { ensureDating(st).green.push({ id: S.uid(), text: t }); }); } }); return true;
       case 'del-green': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.green = d.green.filter(function (x) { return x.id !== id; }); }); render(); return true; }
-      case 'add-red': quickAdd('Deal-breaker', 'What you walk away from', function (t) { ensureDating(st).red.push({ id: S.uid(), text: t }); }); return true;
+      case 'add-red': openPicker({ title: 'Deal-breakers', suggestions: SUGGEST.red, onAdd: function (t) { S.mutate(function () { ensureDating(st).red.push({ id: S.uid(), text: t }); }); } }); return true;
       case 'del-red': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.red = d.red.filter(function (x) { return x.id !== id; }); }); render(); return true; }
       case 'add-date-person': openSheet({ title: 'Someone I’m seeing', fields: [{ name: 'name', label: 'Name' }, { name: 'status', label: 'Status', type: 'select', options: ['Talking', 'Dating', 'Paused', 'Ended'], value: 'Talking' }, { name: 'notes', label: 'How do they meet your standards?', type: 'textarea', rows: 3 }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { ensureDating(st).people.push({ id: S.uid(), name: v.name, status: v.status || 'Talking', notes: v.notes || '' }); }); closeSheet(); render(); } }); return true;
       case 'edit-date-person': { const id = el.getAttribute('data-id'); const p = ensureDating(st).people.find(function (x) { return x.id === id; }); if (!p) return true; openSheet({ title: p.name, subtitle: 'Honest notes. This is for you.', fields: [{ name: 'name', label: 'Name', value: p.name }, { name: 'status', label: 'Status', type: 'select', options: ['Talking', 'Dating', 'Paused', 'Ended'], value: p.status }, { name: 'notes', label: 'How do they meet your standards?', type: 'textarea', rows: 4, value: p.notes }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { p.name = v.name || p.name; p.status = v.status; p.notes = v.notes; }); closeSheet(); render(); } }); return true; }
@@ -770,9 +842,15 @@
       case 'del-forever': S.mutate(function () { st.forever.goals = st.forever.goals.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
 
       default:
-        if (act.indexOf('add-love:') === 0) { const key = act.split(':')[1]; quickAdd('Add to ' + key, 'What would you like to keep?', function (t) { st.love[key].push({ id: S.uid(), date: Dates.today(), text: t }); }); return true; }
+        if (act.indexOf('add-love:') === 0) { const key = act.split(':')[1];
+          if (key === 'boundaries') openPicker({ title: 'Boundaries', suggestions: SUGGEST.boundaries, onAdd: function (t) { S.mutate(function () { st.love.boundaries.push({ id: S.uid(), date: Dates.today(), text: t }); }); } });
+          else quickAdd('Add to ' + key, 'What would you like to keep?', function (t) { st.love[key].push({ id: S.uid(), date: Dates.today(), text: t }); });
+          return true; }
         if (act === 'del-love') { const key = el.getAttribute('data-key'); S.mutate(function () { st.love[key] = st.love[key].filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true; }
-        if (act.indexOf('add-beautiful:') === 0) { const key = act.split(':')[1]; quickAdd('Add', 'Write it down', function (t) { st.beautiful[key].push({ id: S.uid(), date: Dates.today(), text: t }); }); return true; }
+        if (act.indexOf('add-beautiful:') === 0) { const key = act.split(':')[1];
+          if (key === 'gratitude') openPicker({ title: 'Gratitude', subtitle: 'Tap what’s true today.', suggestions: SUGGEST.gratitude, onAdd: function (t) { S.mutate(function () { st.beautiful.gratitude.push({ id: S.uid(), date: Dates.today(), text: t }); }); } });
+          else quickAdd('Add', 'Write it down', function (t) { st.beautiful[key].push({ id: S.uid(), date: Dates.today(), text: t }); });
+          return true; }
         if (act === 'del-beautiful') { const key = el.getAttribute('data-key'); S.mutate(function () { st.beautiful[key] = st.beautiful[key].filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true; }
         return false;
     }
@@ -823,12 +901,20 @@
     } else { S.mutate(function () { st.settings.reminders = false; }); }
     render();
   }
-  function maybeRemindNow() {
+  function fireReminder(r) {
+    try { if (global.Notification && Notification.permission === 'granted') new Notification(r.title, { body: r.body, tag: r.id }); } catch (e) {}
+    if (document.visibilityState === 'visible') toast(r.title);
+  }
+  function checkReminders() {
     const st = S.get();
-    if (!st.settings.reminders || !global.Notification || Notification.permission !== 'granted') return;
-    const now = new Date(), rt = (st.settings.reminderTime || '07:30').split(':').map(Number), flag = 'p75:reminded:' + Dates.today();
-    if (localStorage.getItem(flag)) return;
-    if (now.getHours() > rt[0] || (now.getHours() === rt[0] && now.getMinutes() >= rt[1])) { localStorage.setItem(flag, '1'); try { new Notification('Good morning. Welcome home.', { body: 'Drink water. Follow today’s plan. Continue.' }); } catch (e) {} }
+    if (!st.settings.reminders) return;
+    const now = new Date(), today = Dates.today(); let due = [];
+    REMINDERS.forEach(function (r) {
+      const parts = r.time.split(':').map(Number), flag = 'p75:rem:' + r.id + ':' + today;
+      if (localStorage.getItem(flag)) return;
+      if (now.getHours() > parts[0] || (now.getHours() === parts[0] && now.getMinutes() >= parts[1])) { localStorage.setItem(flag, '1'); due.push(r); }
+    });
+    if (due.length) fireReminder(due[due.length - 1]); // only the most recent — no pile-up
   }
   function doImport() {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json,.json';
@@ -858,7 +944,9 @@
   function boot() {
     S.load(); applyTheme(); renderHeader(); bindEvents(); Ach.evaluate(); render(); maybeOnboard();
     setTimeout(function () { S.mutate(function (st) { st.settings.lastOpen = Dates.today(); }); }, 800);
-    maybeRemindNow();
+    checkReminders();
+    setInterval(checkReminders, 300000);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkReminders(); else S.save(); });
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('service-worker.js').catch(function () {});
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
