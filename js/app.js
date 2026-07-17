@@ -6,984 +6,667 @@
 (function (global) {
   'use strict';
 
-  const S = global.P75.Store;
-  const Dates = global.P75.Dates;
-  const M = global.P75.Metrics;
-  const Charts = global.P75.Charts;
-  const Media = global.P75.Media;
-  const Food = global.P75.Food;
-  const Ach = global.P75.Achievements;
-  const Data = global.P75.Data;
+  const S = global.P75.Store, Dates = global.P75.Dates, M = global.P75.Metrics,
+        Charts = global.P75.Charts, Media = global.P75.Media, Food = global.P75.Food,
+        Ach = global.P75.Achievements, Data = global.P75.Data;
 
-  /* ---------------- tiny DOM helpers ---------------- */
   const $ = function (s, r) { return (r || document).querySelector(s); };
   const $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[<>&"']/g, function (c) {
-      return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[<>&"']/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function ensure(o, k, def) { if (o[k] === undefined) o[k] = def; return o[k]; }
-  function money(n) {
-    if (n == null || n === '') return '—';
-    return '₦' + Number(n).toLocaleString();
-  }
+  function money(n) { return (n == null || n === '') ? '—' : '₦' + Number(n).toLocaleString(); }
+  function num(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
+  function splitLines(s) { return (s || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean); }
+  function pick(arr, seed) { return arr[Math.abs(seed || 0) % arr.length]; }
 
-  /* ---------------- gentle language ---------------- */
   const RETURN_LINES = [
     'Welcome home. Nothing is lost. Today still counts.',
     'You’re back. That’s the whole thing. Continue.',
     'No catching up needed. One intentional decision still counts.',
     'Welcome home. Let’s keep the promise, softly.'
   ];
-  const SOFT_LINES = [
-    'Progress still counts.',
-    'Keep going.',
-    'Tomorrow still counts.',
-    'One intentional decision still counts.',
-    'Continue.'
-  ];
-  function pick(arr, seed) { return arr[Math.abs(seed || Date.now()) % arr.length]; }
+  const SOFT_LINES = ['Progress still counts.', 'Keep going.', 'Tomorrow still counts.', 'One intentional decision still counts.', 'Continue.'];
 
   const App = { route: 'today', seg: {}, rec: null };
 
-  /* ================================================================
-     Toasts, sheets & modals
-     ================================================================ */
+  /* ============================ Toasts & sheets ============================ */
   function toast(msg) {
-    let t = $('#toast');
-    if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
-    t.textContent = msg;
-    t.classList.add('show');
-    clearTimeout(t._h);
-    t._h = setTimeout(function () { t.classList.remove('show'); }, 2400);
+    let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove('show'); }, 2400);
   }
+  function closeSheet() { const o = $('#sheet-overlay'); if (o) { o.classList.remove('open'); setTimeout(function () { o.remove(); }, 240); } }
 
-  function closeSheet() {
-    const o = $('#sheet-overlay');
-    if (o) { o.classList.remove('open'); setTimeout(function () { o.remove(); }, 240); }
-  }
-
-  /* openSheet({title, subtitle, fields, submitLabel, onSubmit, bodyHTML}) */
   function openSheet(cfg) {
     closeSheet();
-    const overlay = document.createElement('div');
-    overlay.id = 'sheet-overlay';
-    overlay.className = 'sheet-overlay';
+    const overlay = document.createElement('div'); overlay.id = 'sheet-overlay'; overlay.className = 'sheet-overlay';
     const fieldsHTML = (cfg.fields || []).map(function (f) {
       const val = f.value == null ? '' : f.value;
-      if (f.type === 'textarea') {
-        return `<label class="fld"><span>${esc(f.label)}</span>
-          <textarea name="${f.name}" rows="${f.rows || 4}" placeholder="${esc(f.placeholder || '')}">${esc(val)}</textarea></label>`;
-      }
-      if (f.type === 'select') {
-        return `<label class="fld"><span>${esc(f.label)}</span>
-          <select name="${f.name}">${(f.options || []).map(function (o) {
-            const v = o.value != null ? o.value : o; const t = o.label != null ? o.label : o;
-            return `<option value="${esc(v)}" ${String(v) === String(val) ? 'selected' : ''}>${esc(t)}</option>`;
-          }).join('')}</select></label>`;
-      }
-      return `<label class="fld"><span>${esc(f.label)}</span>
-        <input name="${f.name}" type="${f.type || 'text'}" ${f.step ? 'step="' + f.step + '"' : ''}
-          ${f.min != null ? 'min="' + f.min + '"' : ''} placeholder="${esc(f.placeholder || '')}" value="${esc(val)}"></label>`;
+      if (f.type === 'textarea') return `<label class="fld"><span>${esc(f.label)}</span><textarea name="${f.name}" rows="${f.rows || 4}" placeholder="${esc(f.placeholder || '')}">${esc(val)}</textarea></label>`;
+      if (f.type === 'select') return `<label class="fld"><span>${esc(f.label)}</span><select name="${f.name}">${(f.options || []).map(function (o) { const v = o.value != null ? o.value : o, t = o.label != null ? o.label : o; return `<option value="${esc(v)}" ${String(v) === String(val) ? 'selected' : ''}>${esc(t)}</option>`; }).join('')}</select></label>`;
+      return `<label class="fld"><span>${esc(f.label)}</span><input name="${f.name}" type="${f.type || 'text'}" ${f.step ? 'step="' + f.step + '"' : ''} ${f.min != null ? 'min="' + f.min + '"' : ''} ${f.max != null ? 'max="' + f.max + '"' : ''} placeholder="${esc(f.placeholder || '')}" value="${esc(val)}"></label>`;
     }).join('');
-
-    overlay.innerHTML = `
-      <div class="sheet" role="dialog" aria-modal="true">
-        <div class="sheet-grip"></div>
-        <div class="sheet-head">
-          <h3>${esc(cfg.title || '')}</h3>
-          ${cfg.subtitle ? `<p>${esc(cfg.subtitle)}</p>` : ''}
-        </div>
-        <form id="sheet-form" class="sheet-body">
-          ${cfg.bodyHTML || ''}
-          ${fieldsHTML}
-          <div class="sheet-actions">
-            <button type="button" class="btn ghost" data-act="sheet-cancel">Not now</button>
-            <button type="submit" class="btn primary">${esc(cfg.submitLabel || 'Save')}</button>
-          </div>
-        </form>
-      </div>`;
+    overlay.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="sheet-grip"></div>
+      <div class="sheet-head"><h3>${esc(cfg.title || '')}</h3>${cfg.subtitle ? `<p>${esc(cfg.subtitle)}</p>` : ''}</div>
+      <form id="sheet-form" class="sheet-body">${cfg.bodyHTML || ''}${fieldsHTML}
+        <div class="sheet-actions"><button type="button" class="btn ghost" data-act="sheet-cancel">Not now</button>
+        <button type="submit" class="btn primary">${esc(cfg.submitLabel || 'Save')}</button></div></form></div>`;
     document.body.appendChild(overlay);
     requestAnimationFrame(function () { overlay.classList.add('open'); });
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeSheet(); });
     $('#sheet-form', overlay).addEventListener('submit', function (e) {
-      e.preventDefault();
-      const values = {};
-      $$('input,textarea,select', overlay).forEach(function (el) {
-        if (el.name) values[el.name] = el.value.trim();
-      });
+      e.preventDefault(); const values = {};
+      $$('input,textarea,select', overlay).forEach(function (el) { if (el.name) values[el.name] = el.value.trim(); });
       if (cfg.onSubmit) cfg.onSubmit(values, overlay);
     });
     if (cfg.afterOpen) cfg.afterOpen(overlay);
     return overlay;
   }
-
+  function quickAdd(title, label, apply) {
+    openSheet({ title: title, fields: [{ name: 'text', label: label, type: 'textarea', rows: 3 }], submitLabel: 'Add',
+      onSubmit: function (v) { if (v.text) S.mutate(function () { apply(v.text); }); closeSheet(); render(); } });
+  }
   function confirmSheet(title, subtitle, okLabel, onOk, danger) {
-    openSheet({
-      title: title, subtitle: subtitle, submitLabel: okLabel || 'Yes',
-      onSubmit: function () { closeSheet(); onOk(); }
-    });
+    openSheet({ title: title, subtitle: subtitle, submitLabel: okLabel || 'Yes', onSubmit: function () { closeSheet(); onOk(); } });
     if (danger) { const b = $('#sheet-form .btn.primary'); if (b) b.classList.add('danger'); }
   }
 
-  /* ================================================================
-     Rendering primitives
-     ================================================================ */
+  /* ============================ Primitives ============================ */
   function card(inner, cls) { return `<section class="card ${cls || ''}">${inner}</section>`; }
-  function tile(label, value, sub, cls) {
-    return `<div class="tile ${cls || ''}"><div class="tile-val">${value}</div>
-      <div class="tile-label">${esc(label)}</div>${sub ? `<div class="tile-sub">${esc(sub)}</div>` : ''}</div>`;
-  }
-  function sectionTitle(t, action) {
-    return `<div class="sec-title"><h2>${esc(t)}</h2>${action || ''}</div>`;
-  }
+  function tile(label, value, sub, cls) { return `<div class="tile ${cls || ''}"><div class="tile-val">${value}</div><div class="tile-label">${esc(label)}</div>${sub ? `<div class="tile-sub">${esc(sub)}</div>` : ''}</div>`; }
+  function sectionTitle(t, action) { return `<div class="sec-title"><h2>${esc(t)}</h2>${action || ''}</div>`; }
   function addBtn(act, extra) { return `<button class="add-btn" data-act="${act}" ${extra || ''}>＋</button>`; }
   function listEmpty(msg) { return `<div class="empty">${esc(msg)}</div>`; }
-
-  /* ================================================================
-     Header + greeting
-     ================================================================ */
-  function greeting() {
-    const h = new Date().getHours();
-    let big = 'Good evening.';
-    if (h < 12) big = 'Good morning.'; else if (h < 17) big = 'Good afternoon.';
-    return big;
+  function listBlock(title, addAct, items, renderItem, emptyMsg) {
+    return card(`${sectionTitle(title, addBtn(addAct))}${items.length ? `<div class="rows">` + items.map(renderItem).join('') + `</div>` : listEmpty(emptyMsg)}`);
   }
+  function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning.' : h < 17 ? 'Good afternoon.' : 'Good evening.'; }
 
   function renderHeader() {
-    const st = S.get();
-    const gap = Dates.diffDays(st.settings.lastOpen, Dates.today());
-    const returning = gap >= 2;
-    $('#appbar').innerHTML = `
-      <div class="brand">
-        <div class="brand-mark">75</div>
-        <div class="brand-text"><b>Project 75</b><span>Returning to Her</span></div>
-      </div>
+    $('#appbar').innerHTML = `<div class="brand"><div class="brand-mark">75</div>
+      <div class="brand-text"><b>Project 75</b><span>Returning to Her</span></div></div>
       <button class="icon-btn" data-act="go-settings" aria-label="Settings">⚙︎</button>`;
-    return returning;
   }
 
-  /* ================================================================
-     VIEW: TODAY (home)
-     ================================================================ */
-  const PLAN = [
-    { key: 'water',  title: 'Drink Water',         hint: 'Half your body, mostly water.' },
-    { key: 'diet',   title: "Follow Today's Diet",  hint: 'Protein first. As agreed.' },
-    { key: 'create', title: 'Create Something',     hint: 'A sentence. A post. Anything.' },
-    { key: 'peace',  title: 'Protect Your Peace',   hint: 'Say no to one draining thing.' },
-    { key: 'cont',   title: 'Continue',             hint: 'That is the whole practice.' }
+  /* ============================ People helpers ============================ */
+  function daysUntilBirthday(b) {
+    if (!b) return null;
+    const parts = b.split('-').map(Number); let mo, da;
+    if (parts.length === 3) { mo = parts[1]; da = parts[2]; } else { mo = parts[0]; da = parts[1]; }
+    if (!mo || !da) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let next = new Date(today.getFullYear(), mo - 1, da);
+    if (next < today) next = new Date(today.getFullYear() + 1, mo - 1, da);
+    return Math.round((next - today) / 86400000);
+  }
+  function reachOutNudge() {
+    const people = S.get().people || []; if (!people.length) return '';
+    let bday = null, bmin = 999;
+    people.forEach(function (p) { const dd = daysUntilBirthday(p.birthday); if (dd != null && dd <= 21 && dd < bmin) { bmin = dd; bday = p; } });
+    if (bday) return card(`<div class="nudge"><span class="nudge-ico">🎂</span>
+      <div class="nudge-copy"><b>${esc(bday.name)}’s birthday is ${bmin === 0 ? 'today' : 'in ' + bmin + ' days'}.</b><span>Plan something small and thoughtful.</span></div></div>`, 'nudge-card');
+    let od = null, omax = 0;
+    people.forEach(function (p) { const since = p.lastContacted ? Dates.diffDays(p.lastContacted, Dates.today()) : 999; const over = since - (p.cadence || 7); if (over > 0 && since > omax) { omax = since; od = p; } });
+    if (od) return card(`<div class="nudge"><span class="nudge-ico">📞</span>
+      <div class="nudge-copy"><b>Have you called or texted ${esc(od.name)} recently?</b><span>${od.lastContacted ? 'It’s been ' + omax + ' days.' : 'You haven’t logged reaching out yet.'} A short message counts.</span></div>
+      <button class="btn ghost small" data-act="reached" data-id="${od.id}">Done</button></div>`, 'nudge-card');
+    return '';
+  }
+
+  /* ============================ Constants ============================ */
+  const AGREEMENT = ['No soda.', 'No office snacks.', 'Protein first.', '2 litres of water.', 'Follow today’s meal plan.', 'Continue.'];
+  const DAILY = [
+    { key: 'diet', label: 'Followed my diet' }, { key: 'noSnacks', label: 'No office snacks' },
+    { key: 'noSoda', label: 'No soda' }, { key: 'water', label: 'Drank 2L of water' },
+    { key: 'fruit', label: 'Had my fruit' }, { key: 'protein', label: 'Had my protein' },
+    { key: 'walked', label: 'Walked today' }, { key: 'weighed', label: 'Weighed myself' },
+    { key: 'slept', label: 'Slept 7 hours' }
   ];
+  const SOUL = [{ key: 'create', label: 'Created something' }, { key: 'peace', label: 'Protected my peace' }, { key: 'cont', label: 'Continued' }];
+  const BOOK_STAGES = ['Idea', 'Outlining', 'Drafting', 'Editing', 'Published'];
+  function stageClass(s) { return { Idea: 'idea', Outlining: 'outline', Drafting: 'draft', Editing: 'edit', Published: 'pub' }[s] || 'idea'; }
 
-  function viewToday() {
-    const st = S.get();
-    const today = Dates.today();
-    const p = st.promises[today] || {};
-    const kept = M.dayScore(today);
-    const score = M.promiseScore(30);
-    const streak = M.streak();
-    const cups = st.water[today] || 0;
-    const gap = Dates.diffDays(st.settings.lastOpen, Dates.today());
-    const returning = gap >= 2;
-
-    const planRows = PLAN.map(function (item) {
-      const on = !!p[item.key];
-      return `<button class="plan-row ${on ? 'done' : ''}" data-act="toggle-promise" data-key="${item.key}">
-        <span class="check">${on ? '✓' : ''}</span>
-        <span class="plan-text"><b>${esc(item.title)}</b><i>${esc(item.hint)}</i></span>
-      </button>`;
-    }).join('');
-
-    const ringHTML = Charts.ring({
-      percent: Math.round((kept / 6) * 100), size: 148, stroke: 13,
-      gradient: ['#F3B7C6', '#E38AA0'],
-      label: `<b>${kept}<span>/6</span></b>`, sub: 'promises kept'
-    });
-
-    return `
-      <div class="view today">
-        <header class="hero">
-          <h1 class="hero-big">${esc(greeting())}</h1>
-          <p class="hero-small">Welcome home.</p>
-          ${returning ? `<div class="return-banner">${esc(pick(RETURN_LINES, gap))}</div>` : ''}
-        </header>
-
-        ${card(`
-          <div class="today-top">
-            ${ringHTML}
-            <div class="today-stats">
-              ${tile('Promise Score', score + '%', 'last 30 days')}
-              ${tile('Streak', streak + (streak === 1 ? ' day' : ' days'), 'gently counted')}
-            </div>
-          </div>
-        `, 'today-hero')}
-
-        ${card(`
-          <div class="sec-title"><h2>Today’s Plan</h2></div>
-          <div class="plan-list">${planRows}</div>
-          <div class="water-row">
-            <div class="water-label">Water <b>${cups}</b> / 8 cups</div>
-            <div class="water-actions">
-              <button class="chip-btn" data-act="water-minus">－</button>
-              <button class="chip-btn strong" data-act="water-plus">＋ cup</button>
-            </div>
-          </div>
-          <label class="mini-toggle ${p.noSnacks ? 'on' : ''}" data-act="toggle-promise" data-key="noSnacks">
-            <span class="check">${p.noSnacks ? '✓' : ''}</span> I avoided office snacks today
-          </label>
-          <p class="enough">That is enough.</p>
-        `)}
-
-        ${card(`
-          <div class="quick-grid">
-            <button class="quick" data-act="go-food"><span>🍽️</span>Should I eat this?</button>
-            <button class="quick" data-act="wait20"><span>⏳</span>Wait 20 minutes</button>
-            <button class="quick" data-act="future-her"><span>🤍</span>What would 75kg her do?</button>
-            <button class="quick" data-act="quick-gratitude"><span>🌸</span>One good thing</button>
-          </div>
-        `, 'quiet')}
-
-        <p class="soft-close">${esc(pick(SOFT_LINES, kept + streak))}</p>
-      </div>`;
+  /* ============================ Diet ============================ */
+  function dietCard() {
+    const d = S.get().diet;
+    const sec = function (t, items) { return `<div class="diet-sec"><h4>${esc(t)}</h4><ul>${(items || []).map(function (i) { return `<li>${esc(i)}</li>`; }).join('')}</ul></div>`; };
+    return card(`${sectionTitle('Today’s diet', `<button class="add-btn" data-act="edit-diet">✎</button>`)}
+      <div class="diet-grid">${sec('Breakfast', d.breakfast)}${sec('Lunch', d.lunch)}${sec('Dinner — choose one', d.dinner)}${sec('Unlimited', d.unlimited)}</div>
+      <p class="muted small">Repetition is the strategy. Fewer decisions, fewer chances to negotiate.</p>`, 'diet-card');
   }
 
-  /* ================================================================
-     VIEW: BODY  (segmented: Weight / Food / Future Her)
-     ================================================================ */
+  /* ============================ Office Mode ============================ */
+  function officeCheckpoint(hour) {
+    if (hour < 10) return { time: '8:00 AM', msg: 'Remember: <b>no soda.</b> Water is on your desk, not in a can.' };
+    if (hour < 13) return { time: '10:00 AM', msg: 'Drink water now — a full glass, before the emails.', actions: `<div class="office-actions"><button class="chip-btn strong" data-act="water-plus">＋ a glass</button></div>` };
+    if (hour < 15) {
+      const ans = (S.get().office[Dates.today()] || {}).lunch;
+      if (!ans) return { time: '1:00 PM', msg: 'Did you bring lunch?', actions: `<div class="office-actions"><button class="btn ghost small" data-act="office-lunch" data-v="yes">Yes</button><button class="btn ghost small" data-act="office-lunch" data-v="no">No</button></div>` };
+      return { time: '1:00 PM', msg: ans === 'yes' ? 'Good. You planned ahead — eat it slowly, protein first.' : 'Then choose the most protein-first thing available. No snacks to fill the gap.' };
+    }
+    if (hour < 17) return { time: '3:00 PM', msg: 'Someone is probably offering you snacks right now.<br><b>No, thank you.</b>', actions: `<div class="office-actions"><button class="btn primary small" data-act="office-nothanks">I said no thank you 🤍</button></div>` };
+    return { time: '5:00 PM', msg: 'Well done. You held the line all day.<br>Go home. Rest. Continue.' };
+  }
+  function officeCard() {
+    const d = new Date(), day = d.getDay(), hour = d.getHours();
+    if (day < 1 || day > 5 || hour < 8 || hour >= 18) return '';
+    const cp = officeCheckpoint(hour);
+    return card(`<div class="office-mode"><div class="office-top"><span class="office-clock">${cp.time}</span><span class="office-badge">Office Mode</span></div>
+      <div class="office-msg">${cp.msg}</div>${cp.actions || ''}
+      <button class="office-link" data-act="go-office">See today’s full office plan →</button></div>`, 'office-card');
+  }
+  const OFFICE_PLAN = [
+    { t: '8:00 AM', m: 'Remember: <b>No soda.</b>' }, { t: '10:00 AM', m: 'Drink water.' },
+    { t: '1:00 PM', m: 'Did you bring lunch?' }, { t: '3:00 PM', m: 'Someone is offering you snacks right now. <b>No, thank you.</b>' },
+    { t: '5:00 PM', m: 'Well done. Go home.' }
+  ];
+  function viewOffice() {
+    const nowH = new Date().getHours();
+    const cur = officeCheckpoint(Math.min(17, Math.max(8, nowH)));
+    return `<div class="view"><header class="page-head"><h1>Office Mode</h1><p>Monday to Friday, 8–5. Where it’s hardest — so I’m strictest here.</p></header>
+      ${card(`<div class="office-mode"><div class="office-top"><span class="office-badge">Right now</span></div>
+        <div class="office-clock big">${cur.time}</div><div class="office-msg">${cur.msg}</div>${cur.actions || ''}</div>`, 'office-card')}
+      ${card(`${sectionTitle('Today’s checkpoints')}<div class="office-timeline">${OFFICE_PLAN.map(function (c) { return `<div class="ot-row"><div class="ot-time">${c.t}</div><div class="ot-msg">${c.m}</div></div>`; }).join('')}</div>`)}
+      ${card(`<div class="quote-block">Between 8 and 5, you don’t negotiate. You already decided. Continue.</div>`, 'quote')}</div>`;
+  }
+
+  /* ============================ VIEW: TODAY ============================ */
+  function viewToday() {
+    const st = S.get(), today = Dates.today(), p = st.promises[today] || {};
+    const kept = M.dayScore(today), total = M.promiseTotal(), score = M.promiseScore(30), streak = M.streak();
+    const cups = st.water[today] || 0;
+    const gap = Dates.diffDays(st.settings.lastOpen, today), returning = gap >= 2;
+    const reached = M.goalReached(), month = M.monthly(), focus = month.focus || [];
+
+    const trackRow = function (item, extra) {
+      const on = !!p[item.key];
+      return `<div class="track-row ${on ? 'done' : ''}"><button class="track-main" data-act="toggle-promise" data-key="${item.key}">
+        <span class="check">${on ? '✓' : ''}</span><span class="track-label">${esc(item.label)}</span></button>${extra || ''}</div>`;
+    };
+    const waterExtra = `<span class="cups"><button class="chip-btn" data-act="water-minus">－</button><b>${cups}/8</b><button class="chip-btn strong" data-act="water-plus">＋</button></span>`;
+    const dailyRows = DAILY.map(function (i) { return trackRow(i, i.key === 'water' ? waterExtra : ''); }).join('');
+    const soulRows = SOUL.map(function (i) { return trackRow(i); }).join('');
+
+    const ringHTML = Charts.ring({ percent: Math.round((kept / total) * 100), size: 148, stroke: 13, gradient: ['#F3B7C6', '#E38AA0'], label: `<b>${kept}<span>/${total}</span></b>`, sub: 'promises kept' });
+
+    return `<div class="view today">
+      ${card(`<div class="agreement"><h1 class="agree-hi">${esc(greeting())}</h1><p class="agree-welcome">Welcome home.</p>
+        ${returning ? `<div class="return-banner">${esc(pick(RETURN_LINES, gap))}</div>` : ''}
+        <div class="agree-label">Your agreement today</div>
+        <ul class="agree-list">${AGREEMENT.map(function (a) { return `<li>${esc(a)}</li>`; }).join('')}</ul>
+        <div class="agree-seal">You do not have permission to quit today.</div></div>`, 'agreement-card')}
+
+      ${reached ? card(`<div class="forever-mini"><div class="forever-badge">✦</div>
+        <div class="forever-copy"><b>You made it to her.</b><span>Project 75 is now Project Forever.</span></div>
+        <button class="btn ghost small" data-act="go-forever">What next →</button></div>`, 'forever-mini-card') : ''}
+
+      ${reachOutNudge()}
+
+      ${card(`<div class="today-top">${ringHTML}<div class="today-stats">
+        ${tile('Promise Score', score + '%', 'last 30 days')}${tile('Streak', streak + (streak === 1 ? ' day' : ' days'), 'gently counted')}</div></div>`, 'today-hero')}
+
+      ${card(`${sectionTitle('Daily tracker')}<div class="track-list">${dailyRows}</div>
+        <div class="track-divider">And for her heart</div><div class="track-list">${soulRows}</div>
+        <p class="enough">Keep at least one promise. That is enough.</p>`)}
+
+      ${dietCard()}
+
+      ${card(`<div class="sec-title"><h2>This month · only three</h2><button class="add-btn" data-act="go-month">›</button></div>
+        ${focus.length ? `<div class="focus-list">` + focus.map(function (f, i) { return `<button class="focus-row ${f.done ? 'done' : ''}" data-act="toggle-focus" data-id="${f.id}"><span class="focus-num">${i + 1}</span><span class="focus-text">${esc(f.title)}</span><span class="check">${f.done ? '✓' : ''}</span></button>`; }).join('') + `</div>` : `<button class="btn ghost full" data-act="go-month">Choose this month’s three focuses</button>`}`)}
+
+      ${officeCard()}
+
+      ${card(`<div class="quick-grid">
+        <button class="quick" data-act="go-food"><span>🍽️</span>Should I eat this?</button>
+        <button class="quick" data-act="wait20"><span>⏳</span>Wait 20 minutes</button>
+        <button class="quick" data-act="hunger-jump"><span>📊</span>How hungry am I?</button>
+        <button class="quick" data-act="future-her"><span>🤍</span>What would 75kg her do?</button></div>`, 'quiet')}
+
+      <p class="soft-close">${esc(pick(SOFT_LINES, kept + streak))}</p></div>`;
+  }
+
+  /* ============================ VIEW: BODY ============================ */
   function viewBody() {
     const seg = App.seg.body || 'weight';
     const inner = seg === 'food' ? bodyFood() : seg === 'future' ? bodyFuture() : bodyWeight();
-    return `
-      <div class="view">
-        <header class="page-head"><h1>Your Body</h1><p>Kind, honest, unhurried.</p></header>
-        <div class="segmented" data-seg="body">
-          <button class="${seg === 'weight' ? 'on' : ''}" data-act="seg" data-group="body" data-val="weight">Weight</button>
-          <button class="${seg === 'food' ? 'on' : ''}" data-act="seg" data-group="body" data-val="food">Food</button>
-          <button class="${seg === 'future' ? 'on' : ''}" data-act="seg" data-group="body" data-val="future">Future Her</button>
-        </div>
-        ${inner}
-      </div>`;
+    return `<div class="view"><header class="page-head"><h1>Your Body</h1><p>Kind, honest, unhurried.</p></header>
+      <div class="segmented" data-seg="body">
+        <button class="${seg === 'weight' ? 'on' : ''}" data-act="seg" data-group="body" data-val="weight">Weight</button>
+        <button class="${seg === 'food' ? 'on' : ''}" data-act="seg" data-group="body" data-val="food">Food</button>
+        <button class="${seg === 'future' ? 'on' : ''}" data-act="seg" data-group="body" data-val="future">Future Her</button></div>${inner}</div>`;
   }
 
   function bodyWeight() {
-    const st = S.get();
-    const cur = M.currentWeight(), start = M.startWeight(), goal = M.goalWeight();
-    const remaining = M.remaining(), lost = M.totalLost();
-    const bmi = M.bmi(), bmiLabel = M.bmiLabel(bmi);
-    const fc = M.forecast();
-    const pct = M.percentToGoal();
-
-    const chart = Charts.weightChart(M.sortedWeights(), {
-      goal: goal,
-      forecast: (fc && !fc.arrived && !fc.unknown) ? { arrivalKey: fc.arrivalKey } : null
-    });
+    const st = S.get(), cur = M.currentWeight(), start = M.startWeight(), goal = M.goalWeight();
+    const remaining = M.remaining(), lost = M.totalLost(), bmi = M.bmi(), bmiLabel = M.bmiLabel(bmi);
+    const fc = M.forecast(), pct = M.percentToGoal();
+    const target = M.targetDate(), reqRate = M.requiredWeeklyRate();
+    const chart = Charts.weightChart(M.sortedWeights(), { goal: goal, forecast: (fc && !fc.arrived && !fc.unknown) ? { arrivalKey: fc.arrivalKey } : null });
 
     let forecastLine;
     if (fc.arrived) forecastLine = 'You’ve arrived at her. 🤍';
     else if (fc.unknown) forecastLine = 'Your forecast appears once your line has a direction. Keep logging weekly.';
     else forecastLine = `At about ${Math.abs(fc.weeklyRate)}kg / week, 75kg her arrives around <b>${fc.arrivalPretty}</b>.`;
 
-    const ringHTML = Charts.ring({
-      percent: pct, size: 128, stroke: 12, gradient: ['#F3B7C6', '#E38AA0'],
-      label: `<b>${pct}<span>%</span></b>`, sub: 'to goal'
-    });
+    let paceMsg = '';
+    if (!fc.arrived) {
+      if (fc.weeklyRate && fc.weeklyRate <= -reqRate * 0.9) paceMsg = 'You’re on pace with your 6-month plan. 🤍';
+      else if (fc.weeklyRate && fc.weeklyRate < 0) paceMsg = 'A little gentler than plan — and that’s okay. Sustainable wins.';
+      else paceMsg = 'Keep logging weekly; your pace will show here.';
+    }
 
-    const photos = st.photos.slice().reverse();
-    const measures = st.measurements.slice().reverse();
+    const ringHTML = Charts.ring({ percent: pct, size: 128, stroke: 12, gradient: ['#F3B7C6', '#E38AA0'], label: `<b>${pct}<span>%</span></b>`, sub: 'to goal' });
+    const photos = st.photos.slice().reverse(), measures = st.measurements.slice().reverse();
 
     return `
-      ${card(`
-        <div class="weight-hero">
-          ${ringHTML}
-          <div class="weight-grid">
-            ${tile('Current', cur + 'kg')}
-            ${tile('Goal', goal + 'kg')}
-            ${tile('Remaining', remaining + 'kg')}
-            ${tile('Lost', lost + 'kg', 'from ' + start + 'kg')}
-          </div>
-        </div>
-        <div class="cta-row">
-          <button class="btn primary" data-act="log-weight">Log weight</button>
-          <span class="cta-note">Weigh weekly only — the scale isn’t the story.</span>
-        </div>
-      `, 'weight-summary')}
+      ${card(`<div class="weight-hero">${ringHTML}<div class="weight-grid">
+        ${tile('Current', cur + 'kg')}${tile('Goal', goal + 'kg')}${tile('Remaining', remaining + 'kg')}${tile('Lost', lost + 'kg', 'from ' + start + 'kg')}</div></div>
+        <div class="cta-row"><button class="btn primary" data-act="log-weight">Log weight</button><span class="cta-note">Weigh weekly only — the scale isn’t the story.</span></div>`, 'weight-summary')}
 
-      ${card(`${sectionTitle('Your line')}${chart}
-        <div class="forecast-note">${forecastLine}</div>`)}
+      ${card(`${sectionTitle('Your line')}${chart}<div class="forecast-note">${forecastLine}</div>
+        <div class="plan-note">Your 6-month plan: reach 75kg by <b>${Dates.prettyFull(target)}</b> — about ${reqRate}kg/week. ${paceMsg}</div>`)}
 
-      ${card(`
-        <div class="bmi-row">
-          <div>${tile('BMI', bmi, bmiLabel)}</div>
-          <div class="bmi-bar"><div class="bmi-fill" style="width:${Math.min(100, (bmi / 40) * 100)}%"></div></div>
-        </div>`)}
+      ${card(`<div class="bmi-row"><div>${tile('BMI', bmi, bmiLabel)}</div><div class="bmi-bar"><div class="bmi-fill" style="width:${Math.min(100, (bmi / 40) * 100)}%"></div></div></div>`)}
 
       ${card(`${sectionTitle('Measurements', addBtn('add-measurement'))}
-        ${measures.length ? `<div class="rows">` + measures.map(function (m) {
-          const parts = ['waist', 'hips', 'bust', 'thigh', 'arm'].filter(function (k) { return m[k]; })
-            .map(function (k) { return k + ' ' + m[k] + 'cm'; }).join(' · ');
-          return `<div class="row"><div><b>${esc(Dates.prettyShort(m.date))}</b><i>${esc(parts || '—')}</i></div></div>`;
-        }).join('') + `</div>` : listEmpty('Optional — a tape measure tells the truth the scale hides.')}`)}
+        ${measures.length ? `<div class="rows">` + measures.map(function (m) { const parts = ['waist', 'hips', 'bust', 'thigh', 'arm'].filter(function (k) { return m[k]; }).map(function (k) { return k + ' ' + m[k] + 'cm'; }).join(' · '); return `<div class="row"><div><b>${esc(Dates.prettyShort(m.date))}</b><i>${esc(parts || '—')}</i></div></div>`; }).join('') + `</div>` : listEmpty('Optional — a tape measure tells the truth the scale hides.')}`)}
 
       ${card(`${sectionTitle('Progress photos', addBtn('add-photo'))}
-        ${photos.length ? `<div class="gallery" id="gal-progress">` + photos.map(function (ph) {
-          return `<figure class="shot" data-mid="${ph.mediaId}"><img alt="progress" data-load="${ph.mediaId}">
-            <figcaption>${esc(Dates.prettyShort(ph.date))}</figcaption>
-            <button class="shot-del" data-act="del-photo" data-id="${ph.id}" data-mid="${ph.mediaId}">✕</button></figure>`;
-        }).join('') + `</div>` : listEmpty('Private to this device. A gentle before, for future her to smile at.')}`)}
-    `;
+        ${photos.length ? `<div class="gallery">` + photos.map(function (ph) { return `<figure class="shot"><img alt="progress" data-load="${ph.mediaId}"><figcaption>${esc(Dates.prettyShort(ph.date))}</figcaption><button class="shot-del" data-act="del-photo" data-id="${ph.id}" data-mid="${ph.mediaId}">✕</button></figure>`; }).join('') + `</div>` : listEmpty('Private to this device. A gentle before, for future her to smile at.')}`)}`;
   }
 
   function bodyFood() {
-    const st = S.get();
-    const nn = st.nonNegotiables;
-    const log = st.foodLog.slice().reverse().slice(0, 12);
+    const st = S.get(), nn = st.nonNegotiables, log = st.foodLog.slice().reverse().slice(0, 12);
     return `
-      ${card(`
-        <div class="sec-title"><h2>Should I eat this?</h2></div>
-        <p class="muted">Ask before, not after. I’ll be honest — I won’t negotiate.</p>
-        <div class="food-check">
-          <input id="food-input" type="text" placeholder="e.g. office cake, chicken, soda…" autocomplete="off">
-          <button class="btn primary" data-act="food-check">Ask</button>
-        </div>
-        <div class="food-quick">
-          ${['Office cake', 'Soda', 'Chocolate', 'Office snacks', 'Chicken', 'Greek yogurt'].map(function (x) {
-            return `<button class="tag" data-act="food-quick" data-q="${esc(x)}">${esc(x)}</button>`;
-          }).join('')}
-        </div>
-        <div id="food-verdict" class="food-verdict"></div>
-      `)}
+      ${card(`${sectionTitle('How hungry are you?')}
+        <div class="hunger-scale">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return `<button class="hunger-dot" data-act="hunger-set" data-n="${n}">${n}</button>`; }).join('')}</div>
+        <div class="hunger-legend"><span>Bored</span><span>Peckish</span><span>Hungry</span><span>Starving</span></div>
+        <div id="hunger-out" class="hunger-out"></div>`)}
+
+      ${card(`${sectionTitle('Should I eat this?')}<p class="muted small">Ask before, not after. I’ll be honest — I won’t negotiate.</p>
+        <div class="food-check"><input id="food-input" type="text" placeholder="e.g. office cake, chicken, soda…" autocomplete="off"><button class="btn primary" data-act="food-check">Ask</button></div>
+        <div class="food-quick">${['Office cake', 'Soda', 'Chocolate', 'Office snacks', 'Chicken', 'Greek yogurt'].map(function (x) { return `<button class="tag" data-act="food-quick" data-q="${esc(x)}">${esc(x)}</button>`; }).join('')}</div>
+        <div id="food-verdict" class="food-verdict"></div>`)}
 
       ${card(`${sectionTitle('Non-negotiables', addBtn('add-nn'))}
-        <div class="nn-list">${nn.map(function (n) {
-          return `<div class="nn-row ${n.active ? 'on' : ''}">
-            <button class="nn-toggle" data-act="toggle-nn" data-id="${n.id}">${n.active ? '◆' : '◇'}</button>
-            <span>${esc(n.text)}</span>
-            <button class="nn-del" data-act="del-nn" data-id="${n.id}">✕</button></div>`;
-        }).join('')}</div>
+        <div class="nn-list">${nn.map(function (n) { return `<div class="nn-row ${n.active ? 'on' : ''}"><button class="nn-toggle" data-act="toggle-nn" data-id="${n.id}">${n.active ? '◆' : '◇'}</button><span>${esc(n.text)}</span><button class="nn-del" data-act="del-nn" data-id="${n.id}">✕</button></div>`; }).join('')}</div>
         <p class="muted small">These aren’t rules to break. They’re agreements you already made with her.</p>`)}
 
-      ${card(`${sectionTitle('Today’s food notes')}
-        ${log.length ? `<div class="rows">` + log.map(function (f) {
-          return `<div class="row"><div><b>${esc(f.item)}</b><i>${esc(Dates.prettyShort(f.date))}</i></div>
-            <span class="verdict-pill ${f.verdict}">${f.verdict === 'yes' ? 'Aligned' : f.verdict === 'no' ? 'Off-plan' : 'Noted'}</span></div>`;
-        }).join('') + `</div>` : listEmpty('Nothing logged yet. Every honest note counts.')}`)}
-    `;
+      ${card(`${sectionTitle('Food notes')}
+        ${log.length ? `<div class="rows">` + log.map(function (f) { return `<div class="row"><div><b>${esc(f.item)}</b><i>${esc(Dates.prettyShort(f.date))}</i></div><span class="verdict-pill ${f.verdict}">${f.verdict === 'yes' ? 'Aligned' : f.verdict === 'no' ? 'Off-plan' : 'Noted'}</span></div>`; }).join('') + `</div>` : listEmpty('Nothing logged yet. Every honest note counts.')}`)}`;
   }
 
   function bodyFuture() {
-    return `
-      ${card(`
-        <div class="future-her">
-          <div class="fh-halo">🤍</div>
-          <h2>What would 75kg her do?</h2>
-          <ul class="fh-list">
-            <li>Eats intentionally.</li>
-            <li>Doesn’t negotiate with herself.</li>
-            <li>Drinks water.</li>
-            <li>Sleeps properly.</li>
-            <li>Protects her peace.</li>
-            <li>Continues.</li>
-          </ul>
-          <p class="fh-close">You don’t have to become her. You’re returning to her.</p>
-        </div>
-      `, 'future-card')}
-      ${card(`${sectionTitle('A letter waiting for you')}
-        <p class="muted">When it’s hard, open the Vault and read what you wrote to yourself.</p>
-        <button class="btn ghost" data-act="go-vault">Open the Vault</button>`)}
-    `;
+    return `${card(`<div class="future-her"><div class="fh-halo">🤍</div><h2>What would 75kg her do?</h2>
+      <ul class="fh-list"><li>Eats intentionally.</li><li>Doesn’t negotiate with herself.</li><li>Drinks water.</li><li>Sleeps properly.</li><li>Protects her peace.</li><li>Continues.</li></ul>
+      <p class="fh-close">You don’t have to become her. You’re returning to her.</p></div>`, 'future-card')}
+      ${card(`${sectionTitle('A letter waiting for you')}<p class="muted">When it’s hard, open the Vault and read what you wrote to yourself.</p><button class="btn ghost" data-act="go-vault">Open the Vault</button>`)}`;
   }
 
-  /* ================================================================
-     VIEW: RESETS  (Content / Wealth / Love / Soft Life / Beautiful)
-     ================================================================ */
+  /* ============================ VIEW: RESETS ============================ */
   function viewResets() {
     const seg = App.seg.resets || 'content';
-    const tabs = [
-      ['content', 'Content'], ['wealth', 'Wealth'], ['love', 'Love'],
-      ['soft', 'Soft Life'], ['beautiful', 'Beautiful']
-    ];
-    const inner = ({
-      content: resetContent, wealth: resetWealth, love: resetLove,
-      soft: resetSoft, beautiful: resetBeautiful
-    })[seg]();
-    return `
-      <div class="view">
-        <header class="page-head"><h1>Resets</h1><p>A whole life, not just a body.</p></header>
-        <div class="segmented scroll" data-seg="resets">
-          ${tabs.map(function (t) {
-            return `<button class="${seg === t[0] ? 'on' : ''}" data-act="seg" data-group="resets" data-val="${t[0]}">${t[1]}</button>`;
-          }).join('')}
-        </div>
-        ${inner}
-      </div>`;
+    const tabs = [['content', 'Content'], ['wealth', 'Money'], ['love', 'Love'], ['soft', 'Soft Life'], ['beautiful', 'Beautiful']];
+    const inner = ({ content: resetContent, wealth: resetWealth, love: resetLove, soft: resetSoft, beautiful: resetBeautiful })[seg]();
+    return `<div class="view"><header class="page-head"><h1>Resets</h1><p>A whole life, not just a body.</p></header>
+      <div class="segmented scroll" data-seg="resets">${tabs.map(function (t) { return `<button class="${seg === t[0] ? 'on' : ''}" data-act="seg" data-group="resets" data-val="${t[0]}">${t[1]}</button>`; }).join('')}</div>${inner}</div>`;
   }
 
-  function listBlock(title, addAct, items, renderItem, emptyMsg) {
-    return card(`${sectionTitle(title, addBtn(addAct))}
-      ${items.length ? `<div class="rows">` + items.map(renderItem).join('') + `</div>` : listEmpty(emptyMsg)}`);
+  function projRow(item, kind) {
+    return `<div class="proj-row"><button class="proj-main" data-act="edit-proj" data-kind="${kind}" data-id="${item.id}">
+      <div class="proj-top"><b>${esc(item.title)}</b><span>${item.done ? 'Done ✓' : (item.progress || 0) + '%'}</span></div>
+      <div class="proj-bar"><div class="proj-fill ${item.done ? 'full' : ''}" style="width:${item.done ? 100 : (item.progress || 0)}%"></div></div></button>
+      <button class="nn-del" data-act="del-proj" data-kind="${kind}" data-id="${item.id}">✕</button></div>`;
+  }
+  function projBlock(title, kind, items, emptyMsg) {
+    return card(`${sectionTitle(title, `<button class="add-btn" data-act="add-proj" data-kind="${kind}">＋</button>`)}
+      ${items.length ? `<div class="rows">` + items.map(function (i) { return projRow(i, kind); }).join('') + `</div>` : listEmpty(emptyMsg)}`);
   }
 
+  function bookRow(b) {
+    const stage = b.stage || 'Idea';
+    return `<div class="book-item"><button class="book-row" data-act="edit-book" data-id="${b.id}">
+      <div class="book-spine s-${stageClass(stage)}"></div>
+      <div class="book-info"><div class="book-title">${esc(b.title)}</div>
+        ${b.subtitle ? `<div class="book-sub">“${esc(b.subtitle)}”</div>` : ''}
+        <div class="book-meta"><span class="stage-badge s-${stageClass(stage)}">${esc(stage)}</span>${b.description ? `<span class="book-desc">${esc(b.description)}</span>` : ''}</div>
+      </div></button><button class="nn-del" data-act="del-book" data-id="${b.id}">✕</button></div>`;
+  }
+  function bookVaultCard(books) {
+    return card(`${sectionTitle('The Book Vault', `<button class="add-btn" data-act="add-book">＋</button>`)}
+      <p class="muted small">Unlimited books. An idea can wait years before it’s written — that’s allowed here.</p>
+      ${books.length ? `<div class="book-list">` + books.map(bookRow).join('') + `</div>` : listEmpty('Add a book — even one that’s only an idea for now.')}`, 'bookvault-card');
+  }
   function resetContent() {
     const c = S.get().content;
-    ensure(c, 'posts', 0);
+    ['videos', 'posts', 'pagesWritten', 'coursesCompleted'].forEach(function (k) { ensure(c, k, 0); });
+    ensure(c, 'books', []); ensure(c, 'apps', []); ensure(c, 'games', []); ensure(c, 'projects', []);
+    const booksDone = c.books.filter(function (b) { return b.done || b.stage === 'Published'; }).length;
     return `
-      ${card(`
-        <div class="sec-title"><h2>Content created</h2></div>
-        <div class="counter">
-          <button class="chip-btn" data-act="posts-minus">－</button>
-          <div class="counter-num">${c.posts}<span>pieces</span></div>
-          <button class="chip-btn strong" data-act="posts-plus">＋</button>
-        </div>
-        <p class="muted small">TikToks, posts, essays — anything you made and shared. 100 unlocks a milestone.</p>
-      `)}
-      ${listBlock('Books', 'add-book', c.books, function (b) {
-        return `<div class="row"><label class="row-check ${b.done ? 'done' : ''}" data-act="toggle-book" data-id="${b.id}">
-          <span class="check">${b.done ? '✓' : ''}</span><b>${esc(b.title)}</b></label>
-          <button class="nn-del" data-act="del-book" data-id="${b.id}">✕</button></div>`;
-      }, 'Add a book you’re reading or want to.')}
-      ${listBlock('Writing & book progress', 'add-writing', c.writing, function (w) {
-        return `<div class="row"><div><b>${esc(w.title)}</b>${w.note ? `<i>${esc(w.note)}</i>` : ''}</div>
-          <button class="nn-del" data-act="del-writing" data-id="${w.id}">✕</button></div>`;
-      }, 'Chapters, drafts, publishing goals.')}
-      ${listBlock('Businesses & ideas', 'add-biz', c.businesses, function (b) {
-        return `<div class="row"><label class="row-check ${b.done ? 'done' : ''}" data-act="toggle-biz" data-id="${b.id}">
-          <span class="check">${b.done ? '✓' : ''}</span><b>${esc(b.title)}</b></label>
-          <button class="nn-del" data-act="del-biz" data-id="${b.id}">✕</button></div>`;
-      }, 'One small business goal at a time.')}
-      ${listBlock('Courses & podcasts', 'add-course', c.courses.concat(c.podcasts), function (x) {
-        return `<div class="row"><div><b>${esc(x.title)}</b><i>${x.kind || 'course'}</i></div></div>`;
-      }, 'Things you’re learning from.')}
-    `;
+      ${card(`${sectionTitle('Content reset', `<button class="add-btn" data-act="edit-content">✎</button>`)}
+        <div class="content-grid">${tile('Videos', c.videos)}${tile('Books', booksDone + '/' + c.books.length)}${tile('Pages written', c.pagesWritten)}${tile('Courses', c.coursesCompleted)}${tile('Days created', M.daysCreated())}</div>
+        <div class="content-quick"><button class="chip-btn strong" data-act="videos-plus">＋ video</button><button class="chip-btn" data-act="pages-plus">＋ page</button></div>
+        <p class="muted small">Content creation is one of your biggest goals — so it gets its own scoreboard.</p>`)}
+      ${bookVaultCard(c.books)}
+      ${projBlock('Apps', 'apps', c.apps, 'Your apps — add one and track its progress.')}
+      ${projBlock('Games', 'games', c.games, 'Your games in progress.')}
+      ${projBlock('Projects & other', 'projects', c.projects, 'Courses, comics, websites — anything you’re making.')}`;
   }
 
   function resetWealth() {
     const w = S.get().wealth;
+    ['rentGoal', 'transport', 'food', 'gifts', 'carFund', 'perfumeFund'].forEach(function (k) { ensure(w, k, k === 'rentGoal' ? null : 0); });
     const subsTotal = (w.subscriptions || []).reduce(function (a, s) { return a + (Number(s.amount) || 0); }, 0);
+    const rentPct = (w.rentGoal && w.rentGoal > 0) ? Math.min(100, Math.round((w.rentSavings / w.rentGoal) * 100)) : 0;
+    const spend = M.monthly().intentionalSpend;
     return `
-      ${card(`${sectionTitle('The numbers', `<button class="add-btn" data-act="edit-wealth">✎</button>`)}
-        <div class="weight-grid four">
-          ${tile('Salary', money(w.salary))}
-          ${tile('Rent savings', money(w.rentSavings))}
-          ${tile('Emergency fund', money(w.emergencyFund))}
-          ${tile('Investments', money(w.investments))}
-        </div>
-        ${tile('Monthly budget', money(w.monthlyBudget), 'your soft ceiling', 'wide')}
-      `)}
-      ${listBlock('Subscriptions', 'add-sub', w.subscriptions, function (s) {
-        return `<div class="row"><div><b>${esc(s.name)}</b><i>monthly</i></div>
-          <span class="amt">${money(s.amount)}</span>
-          <button class="nn-del" data-act="del-sub" data-id="${s.id}">✕</button></div>`;
-      }, 'Track what quietly leaves each month.') }
+      ${card(`${sectionTitle('The money page', `<button class="add-btn" data-act="edit-money">✎</button>`)}${tile('Salary', money(w.salary), 'monthly', 'wide')}`)}
+      ${card(`${sectionTitle('Rent goal')}<div class="rent-top"><span>${money(w.rentSavings)}</span><span class="muted">of ${money(w.rentGoal)}</span></div>
+        <div class="rent-bar"><div class="rent-fill" style="width:${rentPct}%"></div></div><div class="muted small">${rentPct}% saved toward next year’s rent.</div>`)}
+      ${card(`${sectionTitle('Funds & envelopes')}<div class="funds-grid">${tile('Emergency', money(w.emergencyFund))}${tile('Car fund', money(w.carFund))}${tile('Transport', money(w.transport))}${tile('Food', money(w.food))}${tile('Gifts', money(w.gifts))}${tile('Perfume', money(w.perfumeFund))}</div>`)}
+      ${listBlock('Subscriptions', 'add-sub', w.subscriptions, function (s) { return `<div class="row"><div><b>${esc(s.name)}</b><i>monthly</i></div><span class="amt">${money(s.amount)}</span><button class="nn-del" data-act="del-sub" data-id="${s.id}">✕</button></div>`; }, 'Track what quietly leaves each month.')}
       ${subsTotal ? `<p class="muted small center">Subscriptions total about ${money(subsTotal)} / month.</p>` : ''}
-      ${listBlock('Financial goals', 'add-fgoal', w.goals, function (g) {
-        return `<div class="row"><label class="row-check ${g.done ? 'done' : ''}" data-act="toggle-fgoal" data-id="${g.id}">
-          <span class="check">${g.done ? '✓' : ''}</span><b>${esc(g.title)}</b>${g.target ? `<i>${money(g.target)}</i>` : ''}</label>
-          <button class="nn-del" data-act="del-fgoal" data-id="${g.id}">✕</button></div>`;
-      }, 'Save first. Spend on purpose.')}
-    `;
+      ${listBlock('Financial goals', 'add-fgoal', w.goals, function (g) { return `<div class="row"><label class="row-check ${g.done ? 'done' : ''}" data-act="toggle-fgoal" data-id="${g.id}"><span class="check">${g.done ? '✓' : ''}</span><b>${esc(g.title)}</b>${g.target ? `<i>${money(g.target)}</i>` : ''}</label><button class="nn-del" data-act="del-fgoal" data-id="${g.id}">✕</button></div>`; }, 'Save first. Spend on purpose.')}
+      ${card(`${sectionTitle('Did I spend intentionally this month?')}<div class="intentional"><button class="btn ${spend === 'yes' ? 'primary' : 'ghost'}" data-act="set-intentional" data-v="yes">Yes</button><button class="btn ${spend === 'no' ? 'primary' : 'ghost'}" data-act="set-intentional" data-v="no">Not quite</button></div>
+        ${spend ? `<p class="muted small center">${spend === 'yes' ? 'Beautiful. Intentional money is soft money.' : 'Noticed, not judged. Next month, on purpose.'}</p>` : ''}`)}`;
   }
 
   function loveList(key, title, addAct, emptyMsg) {
-    const arr = S.get().love[key];
-    return listBlock(title, addAct, arr, function (x) {
-      return `<div class="row"><div><b>${esc(x.text)}</b><i>${esc(Dates.prettyShort(x.date))}</i></div>
-        <button class="nn-del" data-act="del-love" data-key="${key}" data-id="${x.id}">✕</button></div>`;
-    }, emptyMsg);
+    return listBlock(title, addAct, S.get().love[key], function (x) { return `<div class="row"><div><b>${esc(x.text)}</b><i>${esc(Dates.prettyShort(x.date))}</i></div><button class="nn-del" data-act="del-love" data-key="${key}" data-id="${x.id}">✕</button></div>`; }, emptyMsg);
   }
-  function resetLove() {
+
+  function ensureDating(st) {
+    const L = st.love; if (!L.dating2) L.dating2 = { standards: [], green: [], red: [], people: [] };
+    ['standards', 'green', 'red', 'people'].forEach(function (k) { if (!L.dating2[k]) L.dating2[k] = []; });
+    return L.dating2;
+  }
+  function datingSection() {
+    const d = ensureDating(S.get());
+    const chips = function (arr, delAct, empty) { return arr.length ? arr.map(function (x) { return `<span class="dchip">${esc(x.text)}<button data-act="${delAct}" data-id="${x.id}" aria-label="remove">✕</button></span>`; }).join('') : `<span class="muted small">${empty}</span>`; };
+    const STATUS = { Talking: 'talking', Dating: 'dating', Paused: 'paused', Ended: 'ended' };
     return `
-      ${card(`<div class="quote-block">“Intentional relationships. Beautiful, chosen, protected.”</div>`, 'quote')}
-      ${loveList('friendships', 'Friendships', 'add-love:friendships', 'Nurture the ones who feel like home.')}
-      ${loveList('family', 'Family', 'add-love:family', 'A call. A visit. A soft memory.')}
-      ${loveList('dating', 'Dating intentionally', 'add-love:dating', 'On purpose, never out of loneliness.')}
+      ${card(`${sectionTitle('Dating — my standards', addBtn('add-standard'))}
+        <p class="muted small">Decide who you’re becoming intentional for — before the feelings, not after.</p>
+        <div class="dchips">${chips(d.standards, 'del-standard', 'Add what you want and won’t compromise.')}</div>`)}
+
+      ${card(`${sectionTitle('Green flags & deal-breakers')}
+        <div class="flag-group"><div class="flag-head green"><span>Green flags</span><button class="add-btn" data-act="add-green">＋</button></div>
+          <div class="dchips">${chips(d.green, 'del-green', 'What to look for.')}</div></div>
+        <div class="flag-group"><div class="flag-head red"><span>Deal-breakers</span><button class="add-btn" data-act="add-red">＋</button></div>
+          <div class="dchips">${chips(d.red, 'del-red', 'What you walk away from.')}</div></div>`)}
+
+      ${card(`${sectionTitle('People I’m seeing', addBtn('add-date-person'))}
+        <p class="muted small">Hold each one up to your standards. Is this intentional — or filling a void?</p>
+        ${d.people.length ? `<div class="date-people">` + d.people.map(function (p) {
+          return `<div class="date-person"><button class="dp-main" data-act="edit-date-person" data-id="${p.id}">
+            <div class="dp-top"><b>${esc(p.name)}</b><span class="dp-status s-${STATUS[p.status] || 'talking'}">${esc(p.status || 'Talking')}</span></div>
+            ${p.notes ? `<div class="dp-notes">${esc(p.notes)}</div>` : ''}
+            <div class="dp-reflect">Do they meet your standards?</div></button>
+            <button class="nn-del" data-act="del-date-person" data-id="${p.id}">✕</button></div>`;
+        }).join('') + `</div>` : listEmpty('No one yet — and that’s perfectly fine. Intentional means unhurried.')}`)}`;
+  }
+
+  function resetLove() {
+    const commits = S.get().love.commitments || [], people = S.get().people || [];
+    return `
+      ${card(`<div class="quote-block">“I will…”</div>`, 'quote')}
+      ${card(`${sectionTitle('My intentions', addBtn('add-commit'))}<div class="commit-list">${commits.map(function (c) { return `<label class="commit-row ${c.done ? 'on' : ''}" data-act="toggle-commit" data-id="${c.id}"><span class="check">${c.done ? '✓' : ''}</span><span>${esc(c.text)}</span><button class="nn-del" data-act="del-commit" data-id="${c.id}">✕</button></label>`; }).join('')}</div>`)}
+
+      ${card(`${sectionTitle('Family & friends', addBtn('add-person'))}
+        <p class="muted small">Add the people who matter. I’ll gently ask if it’s been a while — and remind you before birthdays.</p>
+        ${people.length ? `<div class="people-list">` + people.map(function (pn) {
+          const since = pn.lastContacted ? Dates.diffDays(pn.lastContacted, Dates.today()) : null;
+          const overdue = since == null || since > (pn.cadence || 7);
+          const bd = daysUntilBirthday(pn.birthday);
+          return `<div class="person ${overdue ? 'overdue' : ''}"><div class="person-top"><b>${esc(pn.name)}</b>${pn.relation ? `<span class="person-rel">${esc(pn.relation)}</span>` : ''}</div>
+            <div class="person-meta">${since == null ? 'Not reached out yet' : (since === 0 ? 'Reached out today' : 'Last reached out ' + since + 'd ago')}${bd != null && bd <= 30 ? ` · 🎂 ${bd === 0 ? 'today!' : 'in ' + bd + 'd'}` : ''}</div>
+            <div class="person-actions"><button class="btn ghost small" data-act="reached" data-id="${pn.id}">I reached out</button><button class="chip-btn" data-act="edit-person" data-id="${pn.id}">✎</button><button class="nn-del" data-act="del-person" data-id="${pn.id}">✕</button></div></div>`;
+        }).join('') + `</div>` : listEmpty('No one added yet. Start with your parents and a close friend.')}`)}
+
+      ${datingSection()}
       ${loveList('boundaries', 'Boundaries', 'add-love:boundaries', 'A boundary is a form of self-love.')}
-      ${loveList('memories', 'Beautiful memories', 'add-love:memories', 'The moments worth keeping.')}
-    `;
+      ${loveList('memories', 'Beautiful memories', 'add-love:memories', 'The moments worth keeping.')}`;
   }
 
   function resetSoft() {
-    const sl = S.get().softlife;
-    const today = Dates.today();
-    const hToday = sl.happiness[today];
+    const sl = S.get().softlife, today = Dates.today(), hToday = sl.happiness[today];
     return `
-      ${card(`
-        <div class="sec-title"><h2>Happiness today</h2></div>
-        <div class="happy-scale">
-          ${[1,2,3,4,5,6,7,8,9,10].map(function (n) {
-            return `<button class="happy-dot ${hToday === n ? 'on' : ''}" data-act="set-happy" data-n="${n}">${n}</button>`;
-          }).join('')}
-        </div>
-        <p class="muted small">${hToday ? 'Noted, softly. Thank you for checking in.' : 'How full does today feel? No wrong answer.'}</p>
-      `)}
-      ${listBlock('Rest & sleep', 'add-rest', sl.weekendReset, function (r) {
-        return `<div class="row"><div><b>${esc(r.text)}</b><i>${esc(Dates.prettyShort(r.date))}</i></div></div>`;
-      }, 'Weekend resets, naps, slow mornings.')}
-      ${listBlock('Solo dates', 'add-solo', sl.soloDates, function (r) {
-        return `<div class="row"><div><b>${esc(r.text)}</b><i>${esc(Dates.prettyShort(r.date))}</i></div></div>`;
-      }, 'A film, a café, a long walk — just you.')}
-      ${listBlock('Travel & beautiful moments', 'add-moment', sl.moments, function (r) {
-        return `<div class="row"><div><b>${esc(r.text)}</b><i>${esc(Dates.prettyShort(r.date))}</i></div></div>`;
-      }, 'Places, plans, and small joys.')}
-    `;
+      ${card(`${sectionTitle('Happiness today')}<div class="happy-scale">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return `<button class="happy-dot ${hToday === n ? 'on' : ''}" data-act="set-happy" data-n="${n}">${n}</button>`; }).join('')}</div>
+        <p class="muted small">${hToday ? 'Noted, softly. Thank you for checking in.' : 'How full does today feel? No wrong answer.'}</p>`)}
+      ${listBlock('Rest & sleep', 'add-rest', sl.weekendReset, function (r) { return `<div class="row"><div><b>${esc(r.text)}</b><i>${esc(Dates.prettyShort(r.date))}</i></div></div>`; }, 'Weekend resets, naps, slow mornings.')}
+      ${listBlock('Solo dates', 'add-solo', sl.soloDates, function (r) { return `<div class="row"><div><b>${esc(r.text)}</b><i>${esc(Dates.prettyShort(r.date))}</i></div></div>`; }, 'A film, a café, a long walk — just you.')}
+      ${listBlock('Travel & beautiful moments', 'add-moment', sl.moments, function (r) { return `<div class="row"><div><b>${esc(r.text)}</b><i>${esc(Dates.prettyShort(r.date))}</i></div></div>`; }, 'Places, plans, and small joys.')}`;
   }
 
   function beautifulList(key, title, addAct, emptyMsg) {
-    const arr = S.get().beautiful[key];
-    return listBlock(title, addAct, arr, function (x) {
-      return `<div class="row"><div><b>${esc(x.text)}</b><i>${esc(Dates.prettyShort(x.date))}</i></div>
-        <button class="nn-del" data-act="del-beautiful" data-key="${key}" data-id="${x.id}">✕</button></div>`;
-    }, emptyMsg);
+    return listBlock(title, addAct, S.get().beautiful[key], function (x) { return `<div class="row"><div><b>${esc(x.text)}</b><i>${esc(Dates.prettyShort(x.date))}</i></div><button class="nn-del" data-act="del-beautiful" data-key="${key}" data-id="${x.id}">✕</button></div>`; }, emptyMsg);
   }
   function resetBeautiful() {
-    return `
-      ${card(`<div class="quote-block">“A beautiful life is also a goal.”</div>`, 'quote')}
+    return `${card(`<div class="quote-block">“A beautiful life is also a goal.”</div>`, 'quote')}
       ${beautifulList('gratitude', 'Gratitude', 'add-beautiful:gratitude', 'Three lines. Whatever is true today.')}
       ${beautifulList('smiles', 'Things that made me smile', 'add-beautiful:smiles', 'Ordinary Tuesdays count too.')}
       ${beautifulList('memories', 'Beautiful memories', 'add-beautiful:memories', 'Saturdays worth remembering.')}
-      ${beautifulList('wins', 'Monthly wins', 'add-beautiful:wins', 'Small wins are still wins.')}
-    `;
+      ${beautifulList('wins', 'Monthly wins', 'add-beautiful:wins', 'Small wins are still wins.')}`;
   }
 
-  /* ================================================================
-     VIEW: VAULT
-     ================================================================ */
+  /* ============================ VIEW: VAULT ============================ */
   function viewVault() {
-    const v = S.get().vault;
-    ensure(v, 'photos', []);
-    const seg = App.seg.vault || 'journal';
-    const tabs = [['journal', 'Journal'], ['letters', 'Letters'], ['dreams', 'Dreams'], ['voice', 'Voice'], ['photos', 'Photos']];
+    const v = S.get().vault; ensure(v, 'photos', []);
+    const seg = App.seg.vault || 'letters';
+    const tabs = [['letters', 'Letters'], ['journal', 'Journal'], ['dreams', 'Dreams'], ['voice', 'Voice'], ['photos', 'Photos']];
     let inner = '';
     if (seg === 'journal') {
-      inner = listBlock('Journals', 'add-journal', v.journals.slice().reverse(), function (j) {
-        return `<button class="row wide" data-act="open-journal" data-id="${j.id}">
-          <div><b>${esc(j.title || 'Untitled')}</b><i>${esc(Dates.prettyShort(j.date))} · ${esc((j.body || '').slice(0, 60))}</i></div></button>`;
-      }, 'A soft place to put the day down.');
+      inner = listBlock('Journals', 'add-journal', v.journals.slice().reverse(), function (j) { return `<button class="row wide" data-act="open-journal" data-id="${j.id}"><div><b>${esc(j.title || 'Untitled')}</b><i>${esc(Dates.prettyShort(j.date))} · ${esc((j.body || '').slice(0, 60))}</i></div></button>`; }, 'A soft place to put the day down.');
     } else if (seg === 'letters') {
-      inner = listBlock('Letters to future me', 'add-letter', v.letters.slice().reverse(), function (l) {
-        return `<button class="row wide" data-act="open-letter" data-id="${l.id}">
-          <div><b>${esc(l.title || 'To future me')}</b><i>${esc(Dates.prettyShort(l.date))}</i></div><span>💌</span></button>`;
-      }, 'Write to her. She’ll need your words later.');
+      inner = listBlock('Letters to future me', 'add-letter', v.letters.slice().reverse(), function (l) { return `<button class="row wide" data-act="open-letter" data-id="${l.id}"><div><b>${esc(l.title || 'To future me')}</b><i>${esc(Dates.prettyShort(l.date))}</i></div><span>💌</span></button>`; }, 'Write to her. She’ll need your words later.');
     } else if (seg === 'dreams') {
-      inner = listBlock('Dreams & goals', 'add-dream', v.dreams.concat(v.goals), function (d) {
-        return `<div class="row"><div><b>${esc(d.text || d.title)}</b></div>
-          <button class="nn-del" data-act="del-dream" data-id="${d.id}">✕</button></div>`;
-      }, 'Name them so they stop being secrets.');
+      inner = listBlock('Dreams & goals', 'add-dream', v.dreams.concat(v.goals), function (d) { return `<div class="row"><div><b>${esc(d.text || d.title)}</b></div><button class="nn-del" data-act="del-dream" data-id="${d.id}">✕</button></div>`; }, 'Name them so they stop being secrets.');
     } else if (seg === 'voice') {
-      inner = card(`${sectionTitle('Voice notes')}
-        <div class="voice-panel">
-          <button class="btn primary" id="rec-btn" data-act="rec-toggle">● Record</button>
-          <span id="rec-status" class="muted small">Speak kindly to yourself.</span>
-        </div>
-        ${v.voice.length ? `<div class="rows" id="voice-list">` + v.voice.slice().reverse().map(function (n) {
-          return `<div class="row"><div><b>${esc(n.note || 'Voice note')}</b><i>${esc(Dates.prettyShort(n.date))}</i></div>
-            <button class="chip-btn" data-act="play-voice" data-mid="${n.mediaId}">▶</button>
-            <button class="nn-del" data-act="del-voice" data-id="${n.id}" data-mid="${n.mediaId}">✕</button></div>`;
-        }).join('') + `</div>` : listEmpty('Record a note for the days words are hard to find.')}`);
+      inner = card(`${sectionTitle('Voice notes')}<div class="voice-panel"><button class="btn primary" id="rec-btn" data-act="rec-toggle">● Record</button><span id="rec-status" class="muted small">Speak kindly to yourself.</span></div>
+        ${v.voice.length ? `<div class="rows">` + v.voice.slice().reverse().map(function (n) { return `<div class="row"><div><b>${esc(n.note || 'Voice note')}</b><i>${esc(Dates.prettyShort(n.date))}</i></div><button class="chip-btn" data-act="play-voice" data-mid="${n.mediaId}">▶</button><button class="nn-del" data-act="del-voice" data-id="${n.id}" data-mid="${n.mediaId}">✕</button></div>`; }).join('') + `</div>` : listEmpty('Record a note for the days words are hard to find.')}`);
     } else {
-      inner = card(`${sectionTitle('Photos', addBtn('add-vault-photo'))}
-        ${v.photos.length ? `<div class="gallery">` + v.photos.slice().reverse().map(function (ph) {
-          return `<figure class="shot" data-mid="${ph.mediaId}"><img alt="memory" data-load="${ph.mediaId}">
-            <button class="shot-del" data-act="del-vault-photo" data-id="${ph.id}" data-mid="${ph.mediaId}">✕</button></figure>`;
-        }).join('') + `</div>` : listEmpty('Keep the moments that made you feel like her.')}`);
+      inner = card(`${sectionTitle('Photos', addBtn('add-vault-photo'))}${v.photos.length ? `<div class="gallery">` + v.photos.slice().reverse().map(function (ph) { return `<figure class="shot"><img alt="memory" data-load="${ph.mediaId}"><button class="shot-del" data-act="del-vault-photo" data-id="${ph.id}" data-mid="${ph.mediaId}">✕</button></figure>`; }).join('') + `</div>` : listEmpty('Keep the moments that made you feel like her.')}`);
     }
-
-    return `
-      <div class="view">
-        <header class="page-head"><h1>The Vault</h1><p>Everything precious, in one quiet place.</p></header>
-        <div class="segmented scroll" data-seg="vault">
-          ${tabs.map(function (t) {
-            return `<button class="${seg === t[0] ? 'on' : ''}" data-act="seg" data-group="vault" data-val="${t[0]}">${t[1]}</button>`;
-          }).join('')}
-        </div>
-        ${inner}
-      </div>`;
+    return `<div class="view"><header class="page-head"><h1>The Vault</h1><p>Everything precious, in one quiet place.</p></header>
+      <div class="segmented scroll" data-seg="vault">${tabs.map(function (t) { return `<button class="${seg === t[0] ? 'on' : ''}" data-act="seg" data-group="vault" data-val="${t[0]}">${t[1]}</button>`; }).join('')}</div>${inner}</div>`;
   }
 
-  /* ================================================================
-     VIEW: PROGRESS (Promise, Achievements, Reports)
-     ================================================================ */
+  /* ============================ VIEW: PROGRESS ============================ */
   function viewProgress() {
-    const st = S.get();
-    const score = M.promiseScore(30), streak = M.streak();
-    const consistency = M.consistencyScore();
-    const today = Dates.today();
-
-    // weekly promise bars (Mon..Sun of this week)
-    const weekStart = Dates.startOfWeek(today);
-    const days = [], labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    for (let i = 0; i < 7; i++) { days.push(M.dayScore(Dates.addDays(weekStart, i))); }
-    const bars = Charts.miniBars(days, labels, { max: 6 });
-
+    const st = S.get(), score = M.promiseScore(30), streak = M.streak(), consistency = M.consistencyScore(), today = Dates.today();
+    const weekStart = Dates.startOfWeek(today), days = [], labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    for (let i = 0; i < 7; i++) days.push(M.dayScore(Dates.addDays(weekStart, i)));
+    const bars = Charts.miniBars(days, labels, { max: M.promiseTotal() });
     const unlocked = Ach.catalog.filter(function (a) { return st.achievements[a.id]; });
-    const locked = Ach.catalog.filter(function (a) { return !st.achievements[a.id]; });
-
-    const badges = Ach.catalog.map(function (a) {
-      const on = !!st.achievements[a.id];
-      return `<div class="badge ${on ? 'on' : ''}">
-        <div class="badge-icon">${a.icon}</div>
-        <div class="badge-title">${esc(a.title)}</div>
-        <div class="badge-note">${on ? esc(a.note) : 'Coming, gently.'}</div>
-      </div>`;
-    }).join('');
-
-    return `
-      <div class="view">
-        <header class="page-head"><h1>Progress</h1><p>Consistency, not perfection.</p></header>
-
-        ${card(`
-          <div class="promise-hero">
-            ${Charts.ring({ percent: score, size: 156, stroke: 14, gradient: ['#F3B7C6', '#E38AA0'],
-              label: `<b>${score}<span>%</span></b>`, sub: 'Promise Score' })}
-            <div class="today-stats">
-              ${tile('Streak', streak + (streak === 1 ? ' day' : ' days'))}
-              ${tile('Consistency', consistency + '%', '30 days')}
-              ${tile('Days kept', M.keptDaysTotal())}
-            </div>
-          </div>
-          <p class="muted small center">Did you keep at least one promise to yourself today? If yes — today counts.</p>
-        `)}
-
-        ${card(`${sectionTitle('This week')}${bars}
-          <p class="muted small center">Each bar is a day you showed up. Empty days are just rest, not failure.</p>`)}
-
-        ${card(`${sectionTitle('Reports')}
-          <div class="report-btns">
-            <button class="btn ghost" data-act="report" data-kind="weekly">Weekly</button>
-            <button class="btn ghost" data-act="report" data-kind="monthly">Monthly</button>
-            <button class="btn ghost" data-act="report" data-kind="quarterly">Quarterly</button>
-          </div>
-          <div id="report-out" class="report-out"></div>`)}
-
-        ${card(`${sectionTitle('Achievements')}
-          <p class="muted small">${unlocked.length} of ${Ach.catalog.length} earned so far.</p>
-          <div class="badge-grid">${badges}</div>`)}
-      </div>`;
+    const badges = Ach.catalog.map(function (a) { const on = !!st.achievements[a.id]; return `<div class="badge ${on ? 'on' : ''}"><div class="badge-icon">${a.icon}</div><div class="badge-title">${esc(a.title)}</div><div class="badge-note">${on ? esc(a.note) : 'Coming, gently.'}</div></div>`; }).join('');
+    return `<div class="view"><header class="page-head"><h1>Progress</h1><p>Consistency, not perfection.</p></header>
+      ${card(`<div class="promise-hero">${Charts.ring({ percent: score, size: 156, stroke: 14, gradient: ['#F3B7C6', '#E38AA0'], label: `<b>${score}<span>%</span></b>`, sub: 'Promise Score' })}
+        <div class="today-stats">${tile('Streak', streak + (streak === 1 ? ' day' : ' days'))}${tile('Consistency', consistency + '%', '30 days')}${tile('Days kept', M.keptDaysTotal())}</div></div>
+        <p class="muted small center">Did you keep at least one promise to yourself today? If yes — today counts.</p>`)}
+      ${card(`${sectionTitle('This week')}${bars}<p class="muted small center">Each bar is a day you showed up. Empty days are rest, not failure.</p>`)}
+      ${card(`${sectionTitle('Reports')}<div class="report-btns"><button class="btn ghost" data-act="report" data-kind="weekly">Weekly</button><button class="btn ghost" data-act="report" data-kind="monthly">Monthly</button><button class="btn ghost" data-act="report" data-kind="quarterly">Quarterly</button></div><div id="report-out" class="report-out"></div>`)}
+      ${card(`${sectionTitle('Achievements')}<p class="muted small">${unlocked.length} of ${Ach.catalog.length} earned so far.</p><div class="badge-grid">${badges}</div>`)}</div>`;
   }
 
-  /* ================================================================
-     VIEW: SETTINGS
-     ================================================================ */
+  /* ============================ VIEW: MONTH ============================ */
+  function defaultIdentity() { return { am: ['disciplined', 'healthy', 'intentional', 'financially intelligent', 'soft', 'beautiful', 'becoming her'], dont: ['drink soda', 'emotionally eat', 'quit'] }; }
+  function viewMonth() {
+    const mk = M.currentMonthKey(), m = M.monthly(mk), identity = m.identity || defaultIdentity(), focus = m.focus || [], spend = m.intentionalSpend;
+    return `<div class="view"><header class="page-head"><h1>Who am I this month?</h1><p>${esc(Dates.prettyMonth(mk).toUpperCase())}</p></header>
+      ${card(`${sectionTitle('I am…', `<button class="add-btn" data-act="edit-identity">✎</button>`)}
+        <ul class="identity-list am">${identity.am.map(function (x) { return `<li>${esc(x)}.</li>`; }).join('')}</ul>
+        <div class="identity-divider">This month I don’t…</div>
+        <ul class="identity-list dont">${identity.dont.map(function (x) { return `<li>${esc(x)}.</li>`; }).join('')}</ul>`, 'identity-card')}
+      ${card(`<div class="sec-title"><h2>This month · only three</h2>${focus.length < 3 ? `<button class="add-btn" data-act="add-focus">＋</button>` : ''}</div>
+        ${focus.length ? `<div class="rows">` + focus.map(function (f, i) { return `<div class="row"><label class="row-check ${f.done ? 'done' : ''}" data-act="toggle-focus" data-id="${f.id}"><span class="focus-num">${i + 1}</span><span class="check">${f.done ? '✓' : ''}</span><b>${esc(f.title)}</b></label><button class="nn-del" data-act="del-focus" data-id="${f.id}">✕</button></div>`; }).join('') + `</div>` : listEmpty('Three goals. No more. That’s the whole point.')}
+        ${focus.length >= 3 ? `<p class="muted small center">Three is the limit. Finish these first. 🤍</p>` : ''}`)}
+      ${card(`${sectionTitle('Did I spend intentionally this month?')}<div class="intentional"><button class="btn ${spend === 'yes' ? 'primary' : 'ghost'}" data-act="set-intentional" data-v="yes">Yes</button><button class="btn ${spend === 'no' ? 'primary' : 'ghost'}" data-act="set-intentional" data-v="no">Not quite</button></div>
+        ${spend ? `<p class="muted small center">${spend === 'yes' ? 'Beautiful. Intentional money is soft money.' : 'Noticed, not judged. Next month, on purpose.'}</p>` : ''}`)}</div>`;
+  }
+
+  /* ============================ VIEW: FOREVER ============================ */
+  function viewForever() {
+    const f = S.get().forever;
+    return `<div class="view">
+      ${card(`<div class="forever-hero"><div class="forever-badge big">✦</div><h1>Welcome.</h1><p class="forever-made">You made it.</p>
+        <p class="forever-sub">You returned to her. Now you get to keep going — not because you have to, but because a beautiful life is also a goal.</p></div>`, 'forever-card')}
+      ${card(`${sectionTitle('What next?', addBtn('add-forever'))}<div class="rows">${f.goals.map(function (g) { return `<div class="row"><label class="row-check ${g.done ? 'done' : ''}" data-act="toggle-forever" data-id="${g.id}"><span class="check">${g.done ? '✓' : ''}</span><b>${esc(g.text)}</b></label><button class="nn-del" data-act="del-forever" data-id="${g.id}">✕</button></div>`; }).join('')}</div>`)}
+      ${card(`<div class="quote-block">Project 75 is now <b>Project Forever</b>.</div>`, 'quote')}</div>`;
+  }
+
+  /* ============================ VIEW: SETTINGS ============================ */
   function viewSettings() {
-    const st = S.get();
-    const s = st.settings;
-    return `
-      <div class="view">
-        <header class="page-head"><h1>Settings</h1><p>Make it feel like yours.</p></header>
-        ${card(`${sectionTitle('You')}
-          <div class="rows">
-            <div class="row"><div><b>Name</b><i>${esc(st.profile.name)}</i></div>
-              <button class="chip-btn" data-act="edit-profile">Edit</button></div>
-            <div class="row"><div><b>Height</b><i>${st.profile.heightCm} cm</i></div></div>
-            <div class="row"><div><b>Journey</b><i>${st.profile.startWeight}kg → ${st.profile.goalWeight}kg</i></div></div>
-          </div>`)}
-
-        ${card(`${sectionTitle('Appearance')}
-          <div class="segmented" data-seg="theme">
-            ${['system', 'light', 'dark'].map(function (t) {
-              return `<button class="${s.theme === t ? 'on' : ''}" data-act="set-theme" data-val="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`;
-            }).join('')}
-          </div>`)}
-
-        ${card(`${sectionTitle('Gentle reminders')}
-          <label class="switch-row">
-            <span>Daily check-in reminder</span>
-            <button class="switch ${s.reminders ? 'on' : ''}" data-act="toggle-reminders" role="switch" aria-checked="${s.reminders}"></button>
-          </label>
-          <label class="fld inline"><span>Time</span><input type="time" value="${s.reminderTime}" data-act="set-remind-time"></label>
-          <p class="muted small">Reminders show while the app is open or installed. Install to your home screen for the best experience.</p>`)}
-
-        ${card(`${sectionTitle('Your data')}
-          <div class="report-btns">
-            <button class="btn ghost" data-act="export-data">Export backup</button>
-            <button class="btn ghost" data-act="import-data">Import backup</button>
-          </div>
-          <p class="muted small">Everything stays on this device. Back up whenever you like.</p>
-          <button class="btn ghost danger" data-act="reset-data">Start the space fresh</button>`)}
-
-        <p class="soft-close">A beautiful life is also a goal.</p>
-      </div>`;
+    const st = S.get(), s = st.settings;
+    return `<div class="view"><header class="page-head"><h1>Settings</h1><p>Make it feel like yours.</p></header>
+      ${card(`${sectionTitle('You')}<div class="rows">
+        <div class="row"><div><b>Name</b><i>${esc(st.profile.name)}</i></div><button class="chip-btn" data-act="edit-profile">Edit</button></div>
+        <div class="row"><div><b>Height</b><i>${st.profile.heightCm} cm</i></div></div>
+        <div class="row"><div><b>Journey</b><i>${st.profile.startWeight}kg → ${st.profile.goalWeight}kg · ${st.profile.targetMonths || 6} months</i></div></div></div>`)}
+      ${card(`${sectionTitle('Appearance')}<div class="segmented" data-seg="theme">${['system', 'light', 'dark'].map(function (t) { return `<button class="${s.theme === t ? 'on' : ''}" data-act="set-theme" data-val="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`; }).join('')}</div>`)}
+      ${card(`${sectionTitle('Gentle reminders')}<label class="switch-row"><span>Daily check-in reminder</span><button class="switch ${s.reminders ? 'on' : ''}" data-act="toggle-reminders" role="switch" aria-checked="${s.reminders}"></button></label>
+        <label class="fld inline"><span>Time</span><input type="time" value="${s.reminderTime}" data-act="set-remind-time"></label>
+        <p class="muted small">Reminders show while the app is open or installed. Install to your home screen for the best experience.</p>`)}
+      ${card(`${sectionTitle('Your data')}<div class="report-btns"><button class="btn ghost" data-act="export-data">Export backup</button><button class="btn ghost" data-act="import-data">Import backup</button></div>
+        <p class="muted small">Everything stays on this device. Back up whenever you like.</p><button class="btn ghost danger" data-act="reset-data">Start the space fresh</button>`)}
+      <p class="soft-close">A beautiful life is also a goal.</p></div>`;
   }
 
-  /* ================================================================
-     Router
-     ================================================================ */
-  const VIEWS = {
-    today: viewToday, body: viewBody, resets: viewResets,
-    vault: viewVault, progress: viewProgress, settings: viewSettings
-  };
-  const TABS = [
-    ['today', 'Today', '🏠'], ['body', 'Body', '🤍'], ['resets', 'Resets', '✨'],
-    ['vault', 'Vault', '🔐'], ['progress', 'Progress', '📈']
-  ];
+  /* ============================ Router ============================ */
+  const VIEWS = { today: viewToday, body: viewBody, resets: viewResets, vault: viewVault, progress: viewProgress, settings: viewSettings, month: viewMonth, office: viewOffice, forever: viewForever };
+  const TABS = [['today', 'Today', '🏠'], ['body', 'Body', '🤍'], ['resets', 'Resets', '✨'], ['vault', 'Vault', '🔐'], ['progress', 'Progress', '📈']];
 
   function renderTabs() {
-    $('#tabbar').innerHTML = TABS.map(function (t) {
-      const on = App.route === t[0];
-      return `<button class="tab ${on ? 'on' : ''}" data-act="go" data-route="${t[0]}">
-        <span class="tab-ico">${t[2]}</span><span class="tab-lab">${t[1]}</span></button>`;
-    }).join('');
+    $('#tabbar').innerHTML = TABS.map(function (t) { const on = App.route === t[0]; return `<button class="tab ${on ? 'on' : ''}" data-act="go" data-route="${t[0]}"><span class="tab-ico">${t[2]}</span><span class="tab-lab">${t[1]}</span></button>`; }).join('');
   }
+  function loadMediaImages(root) { $$('img[data-load]', root).forEach(function (img) { const id = img.getAttribute('data-load'); img.removeAttribute('data-load'); Media.url(id).then(function (u) { if (u) img.src = u; }); }); }
+  function updatePanic() { const el = $('#panic'); if (el) el.hidden = M.inactiveDays() < 3; }
 
   function render() {
-    const view = $('#view');
-    view.classList.remove('enter');
+    const view = $('#view'); view.classList.remove('enter');
     view.innerHTML = (VIEWS[App.route] || viewToday)();
-    // lazy-load media images
-    loadMediaImages(view);
-    renderTabs();
-    requestAnimationFrame(function () {
-      view.classList.add('enter');
-      Charts.animateIn(view);
-    });
-    // reflect settings gear active on settings route handled by header only
-    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+    loadMediaImages(view); renderTabs(); updatePanic();
+    requestAnimationFrame(function () { view.classList.add('enter'); Charts.animateIn(view); });
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }
+  function go(route) { App.route = route; render(); }
 
-  function go(route) {
-    App.route = route;
-    render();
-  }
-
-  function loadMediaImages(root) {
-    $$('img[data-load]', root).forEach(function (img) {
-      const id = img.getAttribute('data-load');
-      img.removeAttribute('data-load');
-      Media.url(id).then(function (u) { if (u) img.src = u; });
-    });
-  }
-
-  /* ================================================================
-     Food verdict rendering
-     ================================================================ */
+  /* ============================ Food, hunger, wait-20, overwhelmed ============================ */
   function runFoodCheck(q) {
-    const res = Food.classify(q);
-    const box = $('#food-verdict');
-    if (!box) return;
-    const cls = res.verdict;
-    box.className = 'food-verdict show ' + cls;
-    box.innerHTML = `
-      <div class="fv-title">${esc(res.title)}</div>
-      <div class="fv-msg">${esc(res.message)}</div>
-      <div class="fv-reason">${esc(res.reason || '')}</div>
-      <div class="fv-actions">
-        <button class="btn ghost small" data-act="food-log" data-item="${esc(res.item)}" data-verdict="${cls}">Note it</button>
-        ${cls === 'no' ? `<button class="btn primary small" data-act="wait20">I really want it →</button>` : ''}
-      </div>`;
-    // log automatically-ish? No — let her choose to note it.
+    const res = Food.classify(q), box = $('#food-verdict'); if (!box) return;
+    box.className = 'food-verdict show ' + res.verdict;
+    box.innerHTML = `<div class="fv-title">${esc(res.title)}</div><div class="fv-msg">${esc(res.message)}</div><div class="fv-reason">${esc(res.reason || '')}</div>
+      <div class="fv-actions"><button class="btn ghost small" data-act="food-log" data-item="${esc(res.item)}" data-verdict="${res.verdict}">Note it</button>${res.verdict === 'no' ? `<button class="btn primary small" data-act="wait20">I really want it →</button>` : ''}</div>`;
+  }
+  function hungerSet(n) {
+    const out = $('#hunger-out'); if (!out) return;
+    $$('.hunger-dot').forEach(function (b) { b.classList.toggle('on', parseInt(b.getAttribute('data-n'), 10) <= n); });
+    let html;
+    if (n <= 3) html = `<div class="hunger-msg low"><b>${n}/10 — that’s not really hunger.</b><p>Are you hungry, or overwhelmed?</p><div class="fv-actions"><button class="btn ghost small" data-act="overwhelmed">I’m overwhelmed</button><button class="btn ghost small" data-act="wait20">Just a craving →</button></div></div>`;
+    else if (n <= 6) html = `<div class="hunger-msg mid"><b>${n}/10 — peckish, not starving.</b><p>Drink water first, then wait twenty minutes. If it passes, it wasn’t hunger.</p><div class="fv-actions"><button class="btn primary small" data-act="wait20">Wait 20 minutes</button></div></div>`;
+    else html = `<div class="hunger-msg high"><b>${n}/10 — real hunger.</b><p>Then eat, intentionally. Protein first, something on today’s plan. You waited, you listened — that’s her.</p></div>`;
+    out.className = 'hunger-out show'; out.innerHTML = html;
+  }
+  function overwhelmedSheet() {
+    openSheet({ title: 'Overwhelmed?', subtitle: 'Not lazy. Overwhelmed. I know the difference — and so should you.',
+      bodyHTML: `<div class="overwhelmed"><p class="ow-lead">Today’s goal just got smaller. This is all it is:</p>
+        <ul class="ow-list"><li>Drink water.</li><li>Eat protein.</li><li>Shower.</li><li>Take a short walk.</li><li>Sleep.</li></ul>
+        <div class="ow-enough">That is enough.</div><p class="ow-sub">Everything else can wait.</p><div class="ow-welcome">Welcome home.</div></div>`,
+      submitLabel: 'That, I can do', onSubmit: function () { closeSheet(); } });
+    const c = $('#sheet-form .btn.ghost'); if (c) c.textContent = 'Close';
   }
 
-  /* ================================================================
-     Wait 20 minutes flow
-     ================================================================ */
   function startWait20() {
-    let step = 0;
-    const answers = {};
-    const Q = Food.CRAVING_QUESTIONS;
-
+    let step = 0; const answers = {}; const Q = Food.CRAVING_QUESTIONS;
     function stepQuestion() {
       const cur = Q[step];
-      openSheet({
-        title: 'Before you decide',
-        subtitle: (step + 1) + ' of ' + Q.length,
-        bodyHTML: `<div class="wait-q">${esc(cur.q)}</div>
-          <div class="wait-choices">
-            <button type="button" class="btn ghost" data-w="no">No</button>
-            <button type="button" class="btn primary" data-w="yes">Yes</button>
-          </div>`,
-        afterOpen: function (ov) {
-          $$('[data-w]', ov).forEach(function (b) {
-            b.addEventListener('click', function () {
-              answers[cur.key] = b.getAttribute('data-w') === 'yes';
-              step++;
-              if (step < Q.length) stepQuestion(); else stepWater();
-            });
-          });
-        }
-      });
-      // hide default submit row
+      openSheet({ title: 'Before you decide', subtitle: (step + 1) + ' of ' + Q.length,
+        bodyHTML: `<div class="wait-q">${esc(cur.q)}</div><div class="wait-choices"><button type="button" class="btn ghost" data-w="no">No</button><button type="button" class="btn primary" data-w="yes">Yes</button></div>`,
+        afterOpen: function (ov) { $$('[data-w]', ov).forEach(function (b) { b.addEventListener('click', function () { answers[cur.key] = b.getAttribute('data-w') === 'yes'; step++; if (step < Q.length) stepQuestion(); else stepWater(); }); }); } });
       const act = $('#sheet-form .sheet-actions'); if (act) act.style.display = 'none';
     }
-
     function stepWater() {
       const emotional = answers.bored || answers.stressed || answers.emotional || answers.tired;
-      openSheet({
-        title: 'Drink water first',
-        subtitle: emotional ? 'This might not be hunger.' : 'Let’s be sure it’s hunger.',
-        bodyHTML: `<div class="wait-water">
-            <div class="wait-emoji">💧</div>
-            <p>${emotional
-              ? 'It sounds like your body is asking for something food won’t fix. Drink a full glass of water, then wait twenty minutes.'
-              : 'Drink a full glass of water. Set this down for twenty minutes. Then we’ll ask again.'}</p>
-          </div>`,
-        submitLabel: 'Start 20 minutes',
-        onSubmit: function () { closeSheet(); startTimer(); }
-      });
+      openSheet({ title: 'Drink water first', subtitle: emotional ? 'This might not be hunger.' : 'Let’s be sure it’s hunger.',
+        bodyHTML: `<div class="wait-water"><div class="wait-emoji">💧</div><p>${emotional ? 'It sounds like your body is asking for something food won’t fix. Drink a full glass of water, then wait twenty minutes.' : 'Drink a full glass of water. Set this down for twenty minutes. Then we’ll ask again.'}</p></div>`,
+        submitLabel: 'Start 20 minutes', onSubmit: function () { closeSheet(); startTimer(); } });
     }
-
     function startTimer() {
       let secs = 20 * 60;
-      const ov = openSheet({
-        title: 'Twenty minutes',
-        subtitle: 'You’re allowed to just breathe.',
-        bodyHTML: `<div class="timer-wrap"><div id="w20-time" class="timer">20:00</div>
-          <p class="muted small">Distract gently — a walk, a text to a friend, a song. I’ll wait with you.</p></div>`,
-        submitLabel: 'I’m still hungry',
-        onSubmit: function () { clearInterval(tk); closeSheet(); stepAfter(); }
-      });
-      // add a "craving passed" button
-      const actions = $('.sheet-actions', ov);
-      const passed = document.createElement('button');
+      const ov = openSheet({ title: 'Twenty minutes', subtitle: 'You’re allowed to just breathe.',
+        bodyHTML: `<div class="timer-wrap"><div id="w20-time" class="timer">20:00</div><p class="muted small">Distract gently — a walk, a text to a friend, a song. I’ll wait with you.</p></div>`,
+        submitLabel: 'I’m still hungry', onSubmit: function () { clearInterval(tk); closeSheet(); stepAfter(); } });
+      const actions = $('.sheet-actions', ov), passed = document.createElement('button');
       passed.type = 'button'; passed.className = 'btn ghost'; passed.textContent = 'It passed 🤍';
       passed.addEventListener('click', function () { clearInterval(tk); closeSheet(); cravingPassed(); });
       actions.insertBefore(passed, actions.firstChild);
-
-      const tk = setInterval(function () {
-        secs--;
-        const el = $('#w20-time');
-        if (el) el.textContent = String(Math.floor(secs / 60)).padStart(2, '0') + ':' + String(secs % 60).padStart(2, '0');
-        if (secs <= 0) { clearInterval(tk); if (el) el.textContent = '00:00'; }
-      }, 1000);
+      const tk = setInterval(function () { secs--; const el = $('#w20-time'); if (el) el.textContent = String(Math.floor(secs / 60)).padStart(2, '0') + ':' + String(secs % 60).padStart(2, '0'); if (secs <= 0) { clearInterval(tk); if (el) el.textContent = '00:00'; } }, 1000);
     }
-
     function cravingPassed() {
       S.mutate(function (st) { st.promises[Dates.today()] = st.promises[Dates.today()] || {}; st.promises[Dates.today()].diet = true; });
-      openSheet({
-        title: 'That was her.',
-        subtitle: 'The waiting was the win.',
-        bodyHTML: `<div class="wait-water"><div class="wait-emoji">🤍</div>
-          <p>You just made one intentional decision. That still counts — it always counts.</p></div>`,
-        submitLabel: 'Continue', onSubmit: function () { closeSheet(); if (App.route === 'today' || App.route === 'body') render(); }
-      });
+      openSheet({ title: 'That was her.', subtitle: 'The waiting was the win.', bodyHTML: `<div class="wait-water"><div class="wait-emoji">🤍</div><p>You just made one intentional decision. That still counts — it always counts.</p></div>`, submitLabel: 'Continue', onSubmit: function () { closeSheet(); render(); } });
     }
-
     function stepAfter() {
-      openSheet({
-        title: 'Still hungry?',
-        subtitle: 'Then eat — intentionally.',
-        bodyHTML: `<div class="wait-water"><div class="wait-emoji">🍽️</div>
-          <p>Real hunger deserves real food. Choose protein first, something on today’s plan. No guilt — you waited, you listened, you chose. That’s the practice.</p></div>`,
-        submitLabel: 'Okay', onSubmit: function () { closeSheet(); }
-      });
+      openSheet({ title: 'Still hungry?', subtitle: 'Then eat — intentionally.', bodyHTML: `<div class="wait-water"><div class="wait-emoji">🍽️</div><p>Real hunger deserves real food. Choose protein first, something on today’s plan. No guilt — you waited, you listened, you chose. That’s the practice.</p></div>`, submitLabel: 'Okay', onSubmit: function () { closeSheet(); } });
     }
-
     stepQuestion();
   }
 
-  /* ================================================================
-     Reports
-     ================================================================ */
+  /* ============================ Reports ============================ */
   function generateReport(kind) {
-    const st = S.get();
-    const today = Dates.today();
+    const st = S.get(), today = Dates.today();
     const spanDays = kind === 'weekly' ? 7 : kind === 'monthly' ? 30 : 91;
     const startKey = Dates.addDays(today, -(spanDays - 1));
-
-    let keptDays = 0, waterSum = 0, waterDays = 0, scoreSum = 0;
-    for (let i = 0; i < spanDays; i++) {
-      const d = Dates.addDays(startKey, i);
-      if (M.dayKept(d)) keptDays++;
-      scoreSum += M.dayScore(d);
-      if (st.water[d] != null) { waterSum += st.water[d]; waterDays++; }
-    }
+    let keptDays = 0, waterSum = 0, waterDays = 0;
+    for (let i = 0; i < spanDays; i++) { const d = Dates.addDays(startKey, i); if (M.dayKept(d)) keptDays++; if (st.water[d] != null) { waterSum += st.water[d]; waterDays++; } }
     const consistency = Math.round((keptDays / spanDays) * 100);
     const weightChange = M.weightChangeSince(startKey);
     const waterAvg = waterDays ? S.round(waterSum / waterDays, 1) : null;
-
-    const unlockedInRange = Ach.catalog.filter(function (a) {
-      const u = st.achievements[a.id]; return u && u >= startKey;
-    });
-
+    const unlockedInRange = Ach.catalog.filter(function (a) { const u = st.achievements[a.id]; return u && u >= startKey; });
     let weightLine;
     if (weightChange == null) weightLine = 'No new weigh-in this period — and that’s okay.';
     else if (weightChange < 0) weightLine = `Down ${Math.abs(weightChange)}kg. Softly, surely.`;
     else if (weightChange === 0) weightLine = 'Weight held steady. Maintenance is mastery too.';
     else weightLine = `Up ${weightChange}kg. Bodies fluctuate — the line matters more than the day. Continue.`;
-
-    const closing = consistency >= 70 ? 'You kept coming home. She’s proud of you.'
-      : consistency >= 30 ? 'You showed up more than you think. Keep the thread.'
-      : 'A quiet season. Nothing is lost — today still counts.';
-
-    return `
-      <div class="report">
-        <div class="report-title">${kind[0].toUpperCase() + kind.slice(1)} report</div>
-        <div class="report-range">${Dates.prettyShort(startKey)} – ${Dates.prettyShort(today)}</div>
-        <div class="report-grid">
-          ${tile('Promise days', keptDays + '/' + spanDays)}
-          ${tile('Consistency', consistency + '%')}
-          ${tile('Water avg', waterAvg != null ? waterAvg + ' cups' : '—')}
-        </div>
-        <div class="report-line">🕊️ ${weightLine}</div>
-        ${unlockedInRange.length ? `<div class="report-line">🏅 Earned: ${unlockedInRange.map(function (a) { return esc(a.title); }).join(', ')}.</div>` : ''}
-        <div class="report-close">${closing}</div>
-      </div>`;
+    const closing = consistency >= 70 ? 'You kept coming home. She’s proud of you.' : consistency >= 30 ? 'You showed up more than you think. Keep the thread.' : 'A quiet season. Nothing is lost — today still counts.';
+    return `<div class="report"><div class="report-title">${kind[0].toUpperCase() + kind.slice(1)} report</div><div class="report-range">${Dates.prettyShort(startKey)} – ${Dates.prettyShort(today)}</div>
+      <div class="report-grid">${tile('Promise days', keptDays + '/' + spanDays)}${tile('Consistency', consistency + '%')}${tile('Water avg', waterAvg != null ? waterAvg + ' cups' : '—')}</div>
+      <div class="report-line">🕊️ ${weightLine}</div>${unlockedInRange.length ? `<div class="report-line">🏅 Earned: ${unlockedInRange.map(function (a) { return esc(a.title); }).join(', ')}.</div>` : ''}
+      <div class="report-close">${closing}</div></div>`;
   }
 
-  /* ================================================================
-     Media capture (photos, voice)
-     ================================================================ */
-  function pickImage(onBlob) {
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*';
-    inp.addEventListener('change', function () {
-      const file = inp.files && inp.files[0];
-      if (file) onBlob(file);
-    });
-    inp.click();
-  }
-
+  /* ============================ Media capture ============================ */
+  function pickImage(onBlob) { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.addEventListener('change', function () { const file = inp.files && inp.files[0]; if (file) onBlob(file); }); inp.click(); }
   async function toggleRecord() {
-    const btn = $('#rec-btn'); const status = $('#rec-status');
-    if (App.rec) {
-      App.rec.stop();
-      return;
-    }
+    const btn = $('#rec-btn'), status = $('#rec-status');
+    if (App.rec) { App.rec.stop(); return; }
     if (!navigator.mediaDevices || !global.MediaRecorder) {
-      // fallback to file upload
       const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'audio/*';
-      inp.addEventListener('change', async function () {
-        const f = inp.files && inp.files[0];
-        if (f) { const mid = await Media.put(f, { type: f.type }); saveVoice(mid); }
-      });
-      inp.click();
-      return;
+      inp.addEventListener('change', async function () { const f = inp.files && inp.files[0]; if (f) { const mid = await Media.put(f, { type: f.type }); saveVoice(mid); } }); inp.click(); return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
-      const chunks = [];
+      const rec = new MediaRecorder(stream), chunks = [];
       rec.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
-      rec.onstop = async function () {
-        stream.getTracks().forEach(function (t) { t.stop(); });
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const mid = await Media.put(blob, { type: 'audio/webm' });
-        App.rec = null;
-        saveVoice(mid);
-      };
-      App.rec = rec;
-      rec.start();
+      rec.onstop = async function () { stream.getTracks().forEach(function (t) { t.stop(); }); const blob = new Blob(chunks, { type: 'audio/webm' }); const mid = await Media.put(blob, { type: 'audio/webm' }); App.rec = null; saveVoice(mid); };
+      App.rec = rec; rec.start();
       if (btn) { btn.textContent = '■ Stop'; btn.classList.add('recording'); }
       if (status) status.textContent = 'Recording… speak kindly.';
-    } catch (e) {
-      toast('Microphone unavailable — try uploading instead.');
-    }
+    } catch (e) { toast('Microphone unavailable — try uploading instead.'); }
   }
   function saveVoice(mid) {
-    openSheet({
-      title: 'Name this note', fields: [{ name: 'note', label: 'A short label', placeholder: 'e.g. For hard days' }],
-      submitLabel: 'Keep it',
-      onSubmit: function (v) {
-        S.mutate(function (st) { ensure(st.vault, 'voice', []); st.vault.voice.push({ id: S.uid(), date: Dates.today(), mediaId: mid, note: v.note || 'Voice note' }); });
-        closeSheet(); render(); toast('Saved to your Vault.');
-      }
-    });
+    openSheet({ title: 'Name this note', fields: [{ name: 'note', label: 'A short label', placeholder: 'e.g. For hard days' }], submitLabel: 'Keep it',
+      onSubmit: function (v) { S.mutate(function (st) { ensure(st.vault, 'voice', []); st.vault.voice.push({ id: S.uid(), date: Dates.today(), mediaId: mid, note: v.note || 'Voice note' }); }); closeSheet(); render(); toast('Saved to your Vault.'); } });
   }
 
-  /* ================================================================
-     Event handling (delegation)
-     ================================================================ */
-  function todayP() { const st = S.get(); const t = Dates.today(); st.promises[t] = st.promises[t] || {}; return st.promises[t]; }
+  /* ============================ Handlers ============================ */
+  function todayP() { const st = S.get(), t = Dates.today(); st.promises[t] = st.promises[t] || {}; return st.promises[t]; }
+  function celebrateMaybe(key) {
+    if (todayP()[key]) {
+      const lines = { cont: 'Continue. That was the whole practice today.', peace: 'Peace protected. 🤍', create: 'You made something. That counts.', diet: 'Aligned with 75kg her.', water: 'Water — your body says thank you.', noSnacks: 'You kept the agreement.', noSoda: 'No soda. Held the line.', protein: 'Protein first. Strong choice.', walked: 'You moved your body. 🤍', fruit: 'Something whole and sweet.', slept: 'Rest is discipline too.', weighed: 'Noted — kindly.' };
+      if (lines[key]) toast(lines[key]);
+    }
+  }
 
-  function handleAction(act, el, e) {
+  function handleAction(act, el) {
     const st = S.get();
     switch (act) {
       case 'go': go(el.getAttribute('data-route')); break;
@@ -993,319 +676,192 @@
       case 'future-her': go('body'); App.seg.body = 'future'; render(); break;
       case 'seg': App.seg[el.getAttribute('data-group')] = el.getAttribute('data-val'); render(); break;
 
-      /* promises */
-      case 'toggle-promise': {
-        const key = el.getAttribute('data-key');
-        S.mutate(function () { const p = todayP(); p[key] = !p[key]; });
-        celebrateMaybe(key);
-        render();
-        break;
-      }
-      case 'water-plus':
-        S.mutate(function () { const t = Dates.today(); st.water[t] = (st.water[t] || 0) + 1; if (st.water[t] >= 8) { todayP().water = true; } });
-        render(); break;
-      case 'water-minus':
-        S.mutate(function () { const t = Dates.today(); st.water[t] = Math.max(0, (st.water[t] || 0) - 1); });
-        render(); break;
+      case 'toggle-promise': { const key = el.getAttribute('data-key'); S.mutate(function () { const p = todayP(); p[key] = !p[key]; }); celebrateMaybe(key); render(); break; }
+      case 'water-plus': S.mutate(function () { const t = Dates.today(); st.water[t] = (st.water[t] || 0) + 1; if (st.water[t] >= 8) todayP().water = true; }); render(); break;
+      case 'water-minus': S.mutate(function () { const t = Dates.today(); st.water[t] = Math.max(0, (st.water[t] || 0) - 1); }); render(); break;
 
-      /* quick actions */
       case 'wait20': startWait20(); break;
-      case 'quick-gratitude':
-        openSheet({ title: 'One good thing', subtitle: 'That’s all today asks.', fields: [{ name: 'text', label: 'Today I’m grateful for…', type: 'textarea', rows: 3 }], submitLabel: 'Keep it',
-          onSubmit: function (v) { if (v.text) { S.mutate(function () { st.beautiful.gratitude.push({ id: S.uid(), date: Dates.today(), text: v.text }); }); } closeSheet(); toast('Kept. 🌸'); if (App.route === 'today') render(); } });
-        break;
 
-      /* food */
       case 'food-check': { const q = $('#food-input') ? $('#food-input').value : ''; runFoodCheck(q); break; }
-      case 'food-quick': { const q = el.getAttribute('data-q'); const inp = $('#food-input'); if (inp) inp.value = q; runFoodCheck(q); break; }
-      case 'food-log':
-        S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: el.getAttribute('data-item'), verdict: el.getAttribute('data-verdict') }); });
-        toast('Noted honestly.'); render(); App.seg.body = 'food'; render(); break;
+      case 'food-quick': { const q = el.getAttribute('data-q'), inp = $('#food-input'); if (inp) inp.value = q; runFoodCheck(q); break; }
+      case 'food-log': S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: el.getAttribute('data-item'), verdict: el.getAttribute('data-verdict') }); }); toast('Noted honestly.'); App.seg.body = 'food'; render(); break;
 
-      /* non-negotiables */
       case 'toggle-nn': S.mutate(function () { const n = st.nonNegotiables.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (n) n.active = !n.active; }); render(); break;
       case 'del-nn': S.mutate(function () { st.nonNegotiables = st.nonNegotiables.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
-      case 'add-nn': openSheet({ title: 'A new agreement', fields: [{ name: 'text', label: 'Non-negotiable', placeholder: 'e.g. No late-night scrolling' }], submitLabel: 'Add',
-          onSubmit: function (v) { if (v.text) S.mutate(function () { st.nonNegotiables.push({ id: S.uid(), text: v.text, active: true }); }); closeSheet(); render(); } }); break;
+      case 'add-nn': openSheet({ title: 'A new agreement', fields: [{ name: 'text', label: 'Non-negotiable', placeholder: 'e.g. No late-night scrolling' }], submitLabel: 'Add', onSubmit: function (v) { if (v.text) S.mutate(function () { st.nonNegotiables.push({ id: S.uid(), text: v.text, active: true }); }); closeSheet(); render(); } }); break;
 
-      /* weight */
-      case 'log-weight':
-        openSheet({ title: 'Log weight', subtitle: 'Weigh weekly only — kindly.', fields: [
-          { name: 'kg', label: 'Weight (kg)', type: 'number', step: '0.1', value: M.currentWeight() },
-          { name: 'date', label: 'Date', type: 'date', value: Dates.today() }], submitLabel: 'Save',
-          onSubmit: function (v) {
-            const kg = parseFloat(v.kg); if (!kg) { toast('Enter a number.'); return; }
-            S.mutate(function () {
-              const d = v.date || Dates.today();
-              const ex = st.weights.find(function (w) { return w.date === d; });
-              if (ex) ex.kg = kg; else st.weights.push({ date: d, kg: kg });
-            });
-            closeSheet(); render(); toast('Logged. The line matters more than the number.');
-          } });
-        break;
-      case 'add-measurement':
-        openSheet({ title: 'Measurements', subtitle: 'Only what you want.', fields: [
-          { name: 'waist', label: 'Waist (cm)', type: 'number', step: '0.1' },
-          { name: 'hips', label: 'Hips (cm)', type: 'number', step: '0.1' },
-          { name: 'bust', label: 'Bust (cm)', type: 'number', step: '0.1' },
-          { name: 'thigh', label: 'Thigh (cm)', type: 'number', step: '0.1' },
-          { name: 'arm', label: 'Arm (cm)', type: 'number', step: '0.1' }], submitLabel: 'Save',
-          onSubmit: function (v) {
-            S.mutate(function () { st.measurements.push({ date: Dates.today(), waist: num(v.waist), hips: num(v.hips), bust: num(v.bust), thigh: num(v.thigh), arm: num(v.arm) }); });
-            closeSheet(); render();
-          } });
-        break;
-      case 'add-photo':
-        pickImage(async function (blob) { const mid = await Media.put(blob, { type: blob.type }); S.mutate(function () { st.photos.push({ id: S.uid(), date: Dates.today(), mediaId: mid, note: '' }); }); render(); toast('A gentle before. 🤍'); });
-        break;
-      case 'del-photo':
-        confirmSheet('Remove this photo?', 'It’s only on this device.', 'Remove', function () {
-          Media.del(el.getAttribute('data-mid')); S.mutate(function () { st.photos = st.photos.filter(function (p) { return p.id !== el.getAttribute('data-id'); }); }); render();
-        }, true); break;
+      case 'log-weight': openSheet({ title: 'Log weight', subtitle: 'Weigh weekly only — kindly.', fields: [{ name: 'kg', label: 'Weight (kg)', type: 'number', step: '0.1', value: M.currentWeight() }, { name: 'date', label: 'Date', type: 'date', value: Dates.today() }], submitLabel: 'Save', onSubmit: function (v) { const kg = parseFloat(v.kg); if (!kg) { toast('Enter a number.'); return; } S.mutate(function () { const d = v.date || Dates.today(), ex = st.weights.find(function (w) { return w.date === d; }); if (ex) ex.kg = kg; else st.weights.push({ date: d, kg: kg }); todayP().weighed = true; }); closeSheet(); render(); toast('Logged. The line matters more than the number.'); } }); break;
+      case 'add-measurement': openSheet({ title: 'Measurements', subtitle: 'Only what you want.', fields: [{ name: 'waist', label: 'Waist (cm)', type: 'number', step: '0.1' }, { name: 'hips', label: 'Hips (cm)', type: 'number', step: '0.1' }, { name: 'bust', label: 'Bust (cm)', type: 'number', step: '0.1' }, { name: 'thigh', label: 'Thigh (cm)', type: 'number', step: '0.1' }, { name: 'arm', label: 'Arm (cm)', type: 'number', step: '0.1' }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.measurements.push({ date: Dates.today(), waist: num(v.waist), hips: num(v.hips), bust: num(v.bust), thigh: num(v.thigh), arm: num(v.arm) }); }); closeSheet(); render(); } }); break;
+      case 'add-photo': pickImage(async function (blob) { const mid = await Media.put(blob, { type: blob.type }); S.mutate(function () { st.photos.push({ id: S.uid(), date: Dates.today(), mediaId: mid, note: '' }); }); render(); toast('A gentle before. 🤍'); }); break;
+      case 'del-photo': confirmSheet('Remove this photo?', 'It’s only on this device.', 'Remove', function () { Media.del(el.getAttribute('data-mid')); S.mutate(function () { st.photos = st.photos.filter(function (p) { return p.id !== el.getAttribute('data-id'); }); }); render(); }, true); break;
 
-      /* content */
-      case 'posts-plus': S.mutate(function () { ensure(st.content, 'posts', 0); st.content.posts++; }); render(); break;
-      case 'posts-minus': S.mutate(function () { st.content.posts = Math.max(0, (st.content.posts || 0) - 1); }); render(); break;
-      case 'add-book': quickAdd('Add a book', 'Title', function (t) { st.content.books.push({ id: S.uid(), title: t, done: false }); }); break;
-      case 'toggle-book': S.mutate(function () { const b = st.content.books.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (b) b.done = !b.done; }); render(); break;
-      case 'del-book': S.mutate(function () { st.content.books = st.content.books.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
-      case 'add-writing': openSheet({ title: 'Writing / progress', fields: [{ name: 'title', label: 'What' }, { name: 'note', label: 'Note (optional)' }], submitLabel: 'Add', onSubmit: function (v) { if (v.title) S.mutate(function () { st.content.writing.push({ id: S.uid(), title: v.title, note: v.note }); }); closeSheet(); render(); } }); break;
-      case 'del-writing': S.mutate(function () { st.content.writing = st.content.writing.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
-      case 'add-biz': quickAdd('Business goal', 'Goal', function (t) { st.content.businesses.push({ id: S.uid(), title: t, done: false }); }); break;
-      case 'toggle-biz': S.mutate(function () { const b = st.content.businesses.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (b) b.done = !b.done; }); render(); break;
-      case 'del-biz': S.mutate(function () { st.content.businesses = st.content.businesses.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
-      case 'add-course': openSheet({ title: 'Course / podcast', fields: [{ name: 'title', label: 'Title' }, { name: 'kind', label: 'Type', type: 'select', options: ['course', 'podcast'] }], submitLabel: 'Add', onSubmit: function (v) { if (v.title) S.mutate(function () { (v.kind === 'podcast' ? st.content.podcasts : st.content.courses).push({ id: S.uid(), title: v.title, kind: v.kind }); }); closeSheet(); render(); } }); break;
+      case 'quick-gratitude': openSheet({ title: 'One good thing', subtitle: 'That’s all today asks.', fields: [{ name: 'text', label: 'Today I’m grateful for…', type: 'textarea', rows: 3 }], submitLabel: 'Keep it', onSubmit: function (v) { if (v.text) S.mutate(function () { st.beautiful.gratitude.push({ id: S.uid(), date: Dates.today(), text: v.text }); }); closeSheet(); toast('Kept. 🌸'); } }); break;
 
-      /* wealth */
-      case 'edit-wealth':
-        openSheet({ title: 'The numbers', fields: [
-          { name: 'salary', label: 'Salary (₦)', type: 'number', value: st.wealth.salary },
-          { name: 'rentSavings', label: 'Rent savings (₦)', type: 'number', value: st.wealth.rentSavings },
-          { name: 'emergencyFund', label: 'Emergency fund (₦)', type: 'number', value: st.wealth.emergencyFund },
-          { name: 'investments', label: 'Investments (₦)', type: 'number', value: st.wealth.investments },
-          { name: 'monthlyBudget', label: 'Monthly budget (₦)', type: 'number', value: st.wealth.monthlyBudget }], submitLabel: 'Save',
-          onSubmit: function (v) { S.mutate(function () { st.wealth.salary = num(v.salary); st.wealth.rentSavings = num(v.rentSavings) || 0; st.wealth.emergencyFund = num(v.emergencyFund) || 0; st.wealth.investments = num(v.investments) || 0; st.wealth.monthlyBudget = num(v.monthlyBudget) || 0; }); closeSheet(); render(); } });
-        break;
-      case 'add-sub': openSheet({ title: 'Subscription', fields: [{ name: 'name', label: 'Name' }, { name: 'amount', label: 'Monthly (₦)', type: 'number' }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { st.wealth.subscriptions.push({ id: S.uid(), name: v.name, amount: num(v.amount) || 0 }); }); closeSheet(); render(); } }); break;
-      case 'del-sub': S.mutate(function () { st.wealth.subscriptions = st.wealth.subscriptions.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
-      case 'add-fgoal': openSheet({ title: 'Financial goal', fields: [{ name: 'title', label: 'Goal' }, { name: 'target', label: 'Target (₦, optional)', type: 'number' }], submitLabel: 'Add', onSubmit: function (v) { if (v.title) S.mutate(function () { st.wealth.goals.push({ id: S.uid(), title: v.title, target: num(v.target), done: false }); }); closeSheet(); render(); } }); break;
-      case 'toggle-fgoal': S.mutate(function () { const g = st.wealth.goals.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (g) g.done = !g.done; }); render(); break;
-      case 'del-fgoal': S.mutate(function () { st.wealth.goals = st.wealth.goals.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
+      case 'edit-diet': { const d = st.diet; openSheet({ title: 'Your diet', subtitle: 'One item per line.', fields: [{ name: 'breakfast', label: 'Breakfast', type: 'textarea', rows: 3, value: d.breakfast.join('\n') }, { name: 'lunch', label: 'Lunch', type: 'textarea', rows: 3, value: d.lunch.join('\n') }, { name: 'dinner', label: 'Dinner — choose one', type: 'textarea', rows: 3, value: d.dinner.join('\n') }, { name: 'unlimited', label: 'Unlimited', type: 'textarea', rows: 3, value: d.unlimited.join('\n') }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.diet = { breakfast: splitLines(v.breakfast), lunch: splitLines(v.lunch), dinner: splitLines(v.dinner), unlimited: splitLines(v.unlimited) }; }); closeSheet(); render(); } }); break; }
 
-      /* love + soft + beautiful generic adds */
-      case 'set-happy': S.mutate(function () { st.softlife.happiness[Dates.today()] = parseInt(el.getAttribute('data-n'), 10); }); render(); break;
-      case 'add-rest': quickAdd('Rest & sleep', 'What restored you?', function (t) { st.softlife.weekendReset.push({ id: S.uid(), date: Dates.today(), text: t }); }); break;
-      case 'add-solo': quickAdd('Solo date', 'What did you do, just for you?', function (t) { st.softlife.soloDates.push({ id: S.uid(), date: Dates.today(), text: t }); }); break;
-      case 'add-moment': quickAdd('Travel / moment', 'A place or a small joy', function (t) { st.softlife.moments.push({ id: S.uid(), date: Dates.today(), text: t }); }); break;
+      default: if (!handleMore(act, el)) handleVaultAndSettings(act, el); break;
+    }
+  }
 
-      /* generic love/beautiful add + delete via data-act "add-love:key" */
+  function handleMore(act, el) {
+    const st = S.get();
+    switch (act) {
+      case 'go-month': go('month'); return true;
+      case 'go-office': go('office'); return true;
+      case 'go-forever': go('forever'); return true;
+      case 'hunger-jump': go('body'); App.seg.body = 'food'; render(); return true;
+      case 'overwhelmed': overwhelmedSheet(); return true;
+      case 'hunger-set': hungerSet(parseInt(el.getAttribute('data-n'), 10)); return true;
+
+      case 'office-lunch': S.mutate(function () { const d = Dates.today(); st.office[d] = st.office[d] || {}; st.office[d].lunch = el.getAttribute('data-v'); }); render(); return true;
+      case 'office-nothanks': S.mutate(function () { todayP().noSnacks = true; }); toast('You kept the agreement. 🤍'); render(); return true;
+
+      case 'add-focus': { const m = M.monthly(); if ((m.focus || []).length >= 3) { openSheet({ title: 'Only three.', subtitle: 'This is the whole point.', bodyHTML: `<p class="ob-copy">Let’s finish these three first. Three intentional goals will change your month more than eleven half-kept ones. 🤍</p>`, submitLabel: 'You’re right', onSubmit: closeSheet }); return true; } openSheet({ title: 'This month’s focus', subtitle: (3 - (m.focus || []).length) + ' of 3 remaining', fields: [{ name: 'title', label: 'One clear goal', placeholder: 'e.g. Lose 3kg' }], submitLabel: 'Add', onSubmit: function (v) { if (v.title) S.mutate(function () { M.monthly().focus.push({ id: S.uid(), title: v.title, done: false }); }); closeSheet(); render(); } }); return true; }
+      case 'toggle-focus': S.mutate(function () { const f = (M.monthly().focus || []).find(function (x) { return x.id === el.getAttribute('data-id'); }); if (f) f.done = !f.done; }); render(); return true;
+      case 'del-focus': S.mutate(function () { const m = M.monthly(); m.focus = (m.focus || []).filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
+      case 'set-intentional': S.mutate(function () { M.monthly().intentionalSpend = el.getAttribute('data-v'); }); render(); return true;
+      case 'edit-identity': { const idn = M.monthly().identity || defaultIdentity(); openSheet({ title: 'Who am I this month?', fields: [{ name: 'am', label: 'I am… (one per line)', type: 'textarea', rows: 7, value: idn.am.join('\n') }, { name: 'dont', label: 'This month I don’t… (one per line)', type: 'textarea', rows: 4, value: idn.dont.join('\n') }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { M.monthly().identity = { am: splitLines(v.am), dont: splitLines(v.dont) }; }); closeSheet(); render(); } }); return true; }
+
+      case 'videos-plus': S.mutate(function () { ensure(st.content, 'videos', 0); st.content.videos++; }); render(); return true;
+      case 'pages-plus': S.mutate(function () { ensure(st.content, 'pagesWritten', 0); st.content.pagesWritten++; }); render(); return true;
+      case 'edit-content': openSheet({ title: 'Update your content score', fields: [{ name: 'videos', label: 'Videos', type: 'number', value: st.content.videos || 0 }, { name: 'pagesWritten', label: 'Pages written', type: 'number', value: st.content.pagesWritten || 0 }, { name: 'coursesCompleted', label: 'Courses completed', type: 'number', value: st.content.coursesCompleted || 0 }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.content.videos = num(v.videos) || 0; st.content.pagesWritten = num(v.pagesWritten) || 0; st.content.coursesCompleted = num(v.coursesCompleted) || 0; }); closeSheet(); render(); } }); return true;
+
+      case 'add-proj': { const kind = el.getAttribute('data-kind'); openSheet({ title: 'New ' + kind.replace(/s$/, ''), fields: [{ name: 'title', label: 'Title' }, { name: 'progress', label: 'Progress %', type: 'number', min: 0, max: 100, value: 0 }], submitLabel: 'Add', onSubmit: function (v) { if (v.title) S.mutate(function () { ensure(st.content, kind, []); st.content[kind].push({ id: S.uid(), title: v.title, progress: S.clamp(num(v.progress) || 0, 0, 100), done: (num(v.progress) || 0) >= 100 }); }); closeSheet(); render(); } }); return true; }
+      case 'edit-proj': { const kind = el.getAttribute('data-kind'), it = st.content[kind].find(function (x) { return x.id === el.getAttribute('data-id'); }); if (!it) return true; openSheet({ title: it.title, fields: [{ name: 'title', label: 'Title', value: it.title }, { name: 'progress', label: 'Progress %', type: 'number', min: 0, max: 100, value: it.progress || 0 }, { name: 'done', label: 'Finished?', type: 'select', options: [{ value: 'no', label: 'In progress' }, { value: 'yes', label: 'Done ✓' }], value: it.done ? 'yes' : 'no' }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { it.title = v.title || it.title; it.progress = S.clamp(num(v.progress) || 0, 0, 100); it.done = v.done === 'yes'; if (it.done) it.progress = 100; }); closeSheet(); render(); } }); return true; }
+      case 'del-proj': { const kind = el.getAttribute('data-kind'); S.mutate(function () { st.content[kind] = st.content[kind].filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true; }
+
+      case 'add-book': openSheet({ title: 'A new book', subtitle: 'It can live in the Idea stage for as long as it needs.', fields: [{ name: 'title', label: 'Title' }, { name: 'subtitle', label: 'Subtitle (optional)' }, { name: 'stage', label: 'Stage', type: 'select', options: BOOK_STAGES, value: 'Idea' }, { name: 'description', label: 'What it’s about', type: 'textarea', rows: 4 }], submitLabel: 'Add to the vault', onSubmit: function (v) { if (v.title) S.mutate(function () { ensure(st.content, 'books', []); st.content.books.push({ id: S.uid(), title: v.title, subtitle: v.subtitle || '', stage: v.stage || 'Idea', description: v.description || '', progress: 0, done: v.stage === 'Published', notes: '' }); }); closeSheet(); render(); toast('Added to the Book Vault. 📖'); } }); return true;
+      case 'edit-book': { const b = st.content.books.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (!b) return true; openSheet({ title: b.title, subtitle: 'No pressure. Move the stage whenever it’s true.', fields: [{ name: 'title', label: 'Title', value: b.title }, { name: 'subtitle', label: 'Subtitle', value: b.subtitle }, { name: 'stage', label: 'Stage', type: 'select', options: BOOK_STAGES, value: b.stage || 'Idea' }, { name: 'description', label: 'What it’s about', type: 'textarea', rows: 4, value: b.description }, { name: 'notes', label: 'Notes to self', type: 'textarea', rows: 3, value: b.notes }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { b.title = v.title || b.title; b.subtitle = v.subtitle; b.stage = v.stage || b.stage; b.description = v.description; b.notes = v.notes; b.done = (b.stage === 'Published'); }); closeSheet(); render(); } }); return true; }
+      case 'del-book': { const bid = el.getAttribute('data-id'); confirmSheet('Remove this book?', 'You can always add it again.', 'Remove', function () { S.mutate(function () { st.content.books = st.content.books.filter(function (x) { return x.id !== bid; }); }); render(); }, true); return true; }
+
+      case 'add-standard': quickAdd('What I want', 'A standard or non-negotiable', function (t) { ensureDating(st).standards.push({ id: S.uid(), text: t }); }); return true;
+      case 'del-standard': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.standards = d.standards.filter(function (x) { return x.id !== id; }); }); render(); return true; }
+      case 'add-green': quickAdd('Green flag', 'What to look for', function (t) { ensureDating(st).green.push({ id: S.uid(), text: t }); }); return true;
+      case 'del-green': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.green = d.green.filter(function (x) { return x.id !== id; }); }); render(); return true; }
+      case 'add-red': quickAdd('Deal-breaker', 'What you walk away from', function (t) { ensureDating(st).red.push({ id: S.uid(), text: t }); }); return true;
+      case 'del-red': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.red = d.red.filter(function (x) { return x.id !== id; }); }); render(); return true; }
+      case 'add-date-person': openSheet({ title: 'Someone I’m seeing', fields: [{ name: 'name', label: 'Name' }, { name: 'status', label: 'Status', type: 'select', options: ['Talking', 'Dating', 'Paused', 'Ended'], value: 'Talking' }, { name: 'notes', label: 'How do they meet your standards?', type: 'textarea', rows: 3 }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { ensureDating(st).people.push({ id: S.uid(), name: v.name, status: v.status || 'Talking', notes: v.notes || '' }); }); closeSheet(); render(); } }); return true;
+      case 'edit-date-person': { const id = el.getAttribute('data-id'); const p = ensureDating(st).people.find(function (x) { return x.id === id; }); if (!p) return true; openSheet({ title: p.name, subtitle: 'Honest notes. This is for you.', fields: [{ name: 'name', label: 'Name', value: p.name }, { name: 'status', label: 'Status', type: 'select', options: ['Talking', 'Dating', 'Paused', 'Ended'], value: p.status }, { name: 'notes', label: 'How do they meet your standards?', type: 'textarea', rows: 4, value: p.notes }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { p.name = v.name || p.name; p.status = v.status; p.notes = v.notes; }); closeSheet(); render(); } }); return true; }
+      case 'del-date-person': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.people = d.people.filter(function (x) { return x.id !== id; }); }); render(); return true; }
+
+      case 'edit-money': openSheet({ title: 'The money page', fields: [{ name: 'salary', label: 'Salary (₦)', type: 'number', value: st.wealth.salary }, { name: 'rentGoal', label: 'Rent goal (₦)', type: 'number', value: st.wealth.rentGoal }, { name: 'rentSavings', label: 'Rent saved so far (₦)', type: 'number', value: st.wealth.rentSavings }, { name: 'emergencyFund', label: 'Emergency fund (₦)', type: 'number', value: st.wealth.emergencyFund }, { name: 'carFund', label: 'Car fund (₦)', type: 'number', value: st.wealth.carFund }, { name: 'transport', label: 'Transport (₦)', type: 'number', value: st.wealth.transport }, { name: 'food', label: 'Food (₦)', type: 'number', value: st.wealth.food }, { name: 'gifts', label: 'Gifts (₦)', type: 'number', value: st.wealth.gifts }, { name: 'perfumeFund', label: 'Perfume fund (₦)', type: 'number', value: st.wealth.perfumeFund }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { const w = st.wealth; w.salary = num(v.salary); w.rentGoal = num(v.rentGoal); w.rentSavings = num(v.rentSavings) || 0; w.emergencyFund = num(v.emergencyFund) || 0; w.carFund = num(v.carFund) || 0; w.transport = num(v.transport) || 0; w.food = num(v.food) || 0; w.gifts = num(v.gifts) || 0; w.perfumeFund = num(v.perfumeFund) || 0; }); closeSheet(); render(); } }); return true;
+      case 'add-sub': openSheet({ title: 'Subscription', fields: [{ name: 'name', label: 'Name' }, { name: 'amount', label: 'Monthly (₦)', type: 'number' }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { st.wealth.subscriptions.push({ id: S.uid(), name: v.name, amount: num(v.amount) || 0 }); }); closeSheet(); render(); } }); return true;
+      case 'del-sub': S.mutate(function () { st.wealth.subscriptions = st.wealth.subscriptions.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
+      case 'add-fgoal': openSheet({ title: 'Financial goal', fields: [{ name: 'title', label: 'Goal' }, { name: 'target', label: 'Target (₦, optional)', type: 'number' }], submitLabel: 'Add', onSubmit: function (v) { if (v.title) S.mutate(function () { st.wealth.goals.push({ id: S.uid(), title: v.title, target: num(v.target), done: false }); }); closeSheet(); render(); } }); return true;
+      case 'toggle-fgoal': S.mutate(function () { const g = st.wealth.goals.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (g) g.done = !g.done; }); render(); return true;
+      case 'del-fgoal': S.mutate(function () { st.wealth.goals = st.wealth.goals.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
+
+      case 'toggle-commit': S.mutate(function () { const c = (st.love.commitments || []).find(function (x) { return x.id === el.getAttribute('data-id'); }); if (c) c.done = !c.done; }); render(); return true;
+      case 'add-commit': quickAdd('A new intention', 'I will…', function (t) { ensure(st.love, 'commitments', []); st.love.commitments.push({ id: S.uid(), text: t, done: false }); }); return true;
+      case 'del-commit': S.mutate(function () { st.love.commitments = (st.love.commitments || []).filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
+
+      case 'add-person': openSheet({ title: 'Someone you love', fields: [{ name: 'name', label: 'Name' }, { name: 'relation', label: 'Relationship', type: 'select', options: ['Family', 'Friend', 'Partner', 'Mentor', 'Other'] }, { name: 'birthday', label: 'Birthday (optional)', type: 'date' }, { name: 'cadence', label: 'Reach out every … days', type: 'number', value: 14 }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { ensure(st, 'people', []); st.people.push({ id: S.uid(), name: v.name, relation: v.relation, birthday: v.birthday || '', cadence: num(v.cadence) || 14, lastContacted: null }); }); closeSheet(); render(); } }); return true;
+      case 'edit-person': { const pn = (st.people || []).find(function (x) { return x.id === el.getAttribute('data-id'); }); if (!pn) return true; openSheet({ title: pn.name, fields: [{ name: 'name', label: 'Name', value: pn.name }, { name: 'relation', label: 'Relationship', type: 'select', options: ['Family', 'Friend', 'Partner', 'Mentor', 'Other'], value: pn.relation }, { name: 'birthday', label: 'Birthday', type: 'date', value: pn.birthday }, { name: 'cadence', label: 'Reach out every … days', type: 'number', value: pn.cadence || 14 }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { pn.name = v.name || pn.name; pn.relation = v.relation; pn.birthday = v.birthday || ''; pn.cadence = num(v.cadence) || 14; }); closeSheet(); render(); } }); return true; }
+      case 'del-person': S.mutate(function () { st.people = (st.people || []).filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
+      case 'reached': { const id = el.getAttribute('data-id'); S.mutate(function () { const pn = (st.people || []).find(function (x) { return x.id === id; }); if (pn) pn.lastContacted = Dates.today(); }); toast('Lovely. Connection kept. 🤍'); render(); return true; }
+
+      case 'set-happy': S.mutate(function () { st.softlife.happiness[Dates.today()] = parseInt(el.getAttribute('data-n'), 10); }); render(); return true;
+      case 'add-rest': quickAdd('Rest & sleep', 'What restored you?', function (t) { st.softlife.weekendReset.push({ id: S.uid(), date: Dates.today(), text: t }); }); return true;
+      case 'add-solo': quickAdd('Solo date', 'What did you do, just for you?', function (t) { st.softlife.soloDates.push({ id: S.uid(), date: Dates.today(), text: t }); }); return true;
+      case 'add-moment': quickAdd('Travel / moment', 'A place or a small joy', function (t) { st.softlife.moments.push({ id: S.uid(), date: Dates.today(), text: t }); }); return true;
+
+      case 'toggle-forever': S.mutate(function () { const g = st.forever.goals.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (g) g.done = !g.done; }); render(); return true;
+      case 'add-forever': quickAdd('Project Forever', 'What’s next for her?', function (t) { st.forever.goals.push({ id: S.uid(), text: t, done: false }); }); return true;
+      case 'del-forever': S.mutate(function () { st.forever.goals = st.forever.goals.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
+
       default:
-        if (act.indexOf('add-love:') === 0) { const key = act.split(':')[1]; quickAdd('Add to ' + key, 'What would you like to keep?', function (t) { st.love[key].push({ id: S.uid(), date: Dates.today(), text: t }); }); }
-        else if (act === 'del-love') { const key = el.getAttribute('data-key'); S.mutate(function () { st.love[key] = st.love[key].filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); }
-        else if (act.indexOf('add-beautiful:') === 0) { const key = act.split(':')[1]; quickAdd('Add', 'Write it down', function (t) { st.beautiful[key].push({ id: S.uid(), date: Dates.today(), text: t }); }); }
-        else if (act === 'del-beautiful') { const key = el.getAttribute('data-key'); S.mutate(function () { st.beautiful[key] = st.beautiful[key].filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); }
-        else handleVaultAndSettings(act, el);
-        break;
-
-      /* vault handled below to keep switch readable */
+        if (act.indexOf('add-love:') === 0) { const key = act.split(':')[1]; quickAdd('Add to ' + key, 'What would you like to keep?', function (t) { st.love[key].push({ id: S.uid(), date: Dates.today(), text: t }); }); return true; }
+        if (act === 'del-love') { const key = el.getAttribute('data-key'); S.mutate(function () { st.love[key] = st.love[key].filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true; }
+        if (act.indexOf('add-beautiful:') === 0) { const key = act.split(':')[1]; quickAdd('Add', 'Write it down', function (t) { st.beautiful[key].push({ id: S.uid(), date: Dates.today(), text: t }); }); return true; }
+        if (act === 'del-beautiful') { const key = el.getAttribute('data-key'); S.mutate(function () { st.beautiful[key] = st.beautiful[key].filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true; }
+        return false;
     }
   }
 
   function handleVaultAndSettings(act, el) {
     const st = S.get();
     switch (act) {
-      case 'add-journal':
-        openSheet({ title: 'New journal entry', fields: [{ name: 'title', label: 'Title (optional)' }, { name: 'body', label: 'Today…', type: 'textarea', rows: 7 }], submitLabel: 'Keep it',
-          onSubmit: function (v) { if (v.body || v.title) S.mutate(function () { st.vault.journals.push({ id: S.uid(), date: Dates.today(), title: v.title, body: v.body }); }); closeSheet(); render(); toast('Held safely.'); } });
-        break;
+      case 'add-journal': openSheet({ title: 'New journal entry', fields: [{ name: 'title', label: 'Title (optional)' }, { name: 'body', label: 'Today…', type: 'textarea', rows: 7 }], submitLabel: 'Keep it', onSubmit: function (v) { if (v.body || v.title) S.mutate(function () { st.vault.journals.push({ id: S.uid(), date: Dates.today(), title: v.title, body: v.body }); }); closeSheet(); render(); toast('Held safely.'); } }); break;
       case 'open-journal': { const j = st.vault.journals.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (j) openSheet({ title: j.title || 'Journal', subtitle: Dates.prettyLong(j.date), bodyHTML: `<div class="reader">${esc(j.body || '').replace(/\n/g, '<br>')}</div>`, submitLabel: 'Close', onSubmit: closeSheet }); break; }
-      case 'add-letter':
-        openSheet({ title: 'Letter to future me', fields: [{ name: 'title', label: 'Title', placeholder: 'To future me' }, { name: 'body', label: 'Dear her…', type: 'textarea', rows: 8 }], submitLabel: 'Seal it',
-          onSubmit: function (v) { if (v.body) S.mutate(function () { st.vault.letters.push({ id: S.uid(), date: Dates.today(), title: v.title, body: v.body }); }); closeSheet(); render(); toast('Sealed with love. 💌'); } });
-        break;
+      case 'add-letter': openSheet({ title: 'Letter to future me', fields: [{ name: 'title', label: 'Title', placeholder: 'To future me' }, { name: 'body', label: 'Dear her…', type: 'textarea', rows: 8 }], submitLabel: 'Seal it', onSubmit: function (v) { if (v.body) S.mutate(function () { st.vault.letters.push({ id: S.uid(), date: Dates.today(), title: v.title, body: v.body }); }); closeSheet(); render(); toast('Sealed with love. 💌'); } }); break;
       case 'open-letter': { const l = st.vault.letters.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (l) openSheet({ title: l.title || 'To future me', subtitle: Dates.prettyLong(l.date), bodyHTML: `<div class="reader letter">${esc(l.body || '').replace(/\n/g, '<br>')}</div>`, submitLabel: 'Close', onSubmit: closeSheet }); break; }
       case 'add-dream': quickAdd('A dream', 'Name it out loud', function (t) { st.vault.dreams.push({ id: S.uid(), date: Dates.today(), text: t }); }); break;
       case 'del-dream': S.mutate(function () { st.vault.dreams = st.vault.dreams.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); st.vault.goals = st.vault.goals.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
       case 'rec-toggle': toggleRecord(); break;
-      case 'play-voice': Media.url(el.getAttribute('data-mid')).then(function (u) { if (u) { const a = new Audio(u); a.play(); toast('Playing…'); } }); break;
+      case 'play-voice': Media.url(el.getAttribute('data-mid')).then(function (u) { if (u) { new Audio(u).play(); toast('Playing…'); } }); break;
       case 'del-voice': confirmSheet('Delete this note?', '', 'Delete', function () { Media.del(el.getAttribute('data-mid')); S.mutate(function () { st.vault.voice = st.vault.voice.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); }, true); break;
       case 'add-vault-photo': pickImage(async function (blob) { const mid = await Media.put(blob, { type: blob.type }); S.mutate(function () { ensure(st.vault, 'photos', []); st.vault.photos.push({ id: S.uid(), date: Dates.today(), mediaId: mid }); }); render(); }); break;
       case 'del-vault-photo': confirmSheet('Remove this photo?', '', 'Remove', function () { Media.del(el.getAttribute('data-mid')); S.mutate(function () { st.vault.photos = st.vault.photos.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); }, true); break;
 
-      /* progress + reports */
       case 'report': { const out = $('#report-out'); if (out) { out.innerHTML = generateReport(el.getAttribute('data-kind')); out.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } break; }
 
-      /* settings */
-      case 'edit-profile': openSheet({ title: 'You', fields: [{ name: 'name', label: 'Name', value: st.profile.name }, { name: 'heightCm', label: 'Height (cm)', type: 'number', value: st.profile.heightCm }, { name: 'goalWeight', label: 'Goal weight (kg)', type: 'number', step: '0.1', value: st.profile.goalWeight }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.profile.name = v.name || st.profile.name; st.profile.heightCm = num(v.heightCm) || st.profile.heightCm; st.profile.goalWeight = num(v.goalWeight) || st.profile.goalWeight; }); closeSheet(); render(); } }); break;
+      case 'edit-profile': openSheet({ title: 'You', fields: [{ name: 'name', label: 'Name', value: st.profile.name }, { name: 'heightCm', label: 'Height (cm)', type: 'number', value: st.profile.heightCm }, { name: 'goalWeight', label: 'Goal weight (kg)', type: 'number', step: '0.1', value: st.profile.goalWeight }, { name: 'targetMonths', label: 'Timeline (months)', type: 'number', value: st.profile.targetMonths || 6 }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.profile.name = v.name || st.profile.name; st.profile.heightCm = num(v.heightCm) || st.profile.heightCm; st.profile.goalWeight = num(v.goalWeight) || st.profile.goalWeight; st.profile.targetMonths = num(v.targetMonths) || st.profile.targetMonths; }); closeSheet(); render(); } }); break;
       case 'set-theme': S.mutate(function () { st.settings.theme = el.getAttribute('data-val'); }); applyTheme(); render(); break;
       case 'toggle-reminders': toggleReminders(); break;
-      case 'set-remind-time': /* handled on change */ break;
       case 'export-data': Data.download(); toast('Backup downloaded.'); break;
       case 'import-data': doImport(); break;
       case 'reset-data': confirmSheet('Start the space fresh?', 'This clears entries on this device. Export a backup first if unsure.', 'Start fresh', function () { Data.reset(); Media.all().then(function (all) { all.forEach(function (r) { Media.del(r.id); }); }); go('today'); }, true); break;
-
       case 'sheet-cancel': closeSheet(); break;
     }
   }
 
-  function quickAdd(title, label, apply) {
-    openSheet({ title: title, fields: [{ name: 'text', label: label, type: 'textarea', rows: 3 }], submitLabel: 'Add',
-      onSubmit: function (v) { if (v.text) S.mutate(function () { apply(v.text); }); closeSheet(); render(); } });
-  }
-  function num(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
-
-  function celebrateMaybe(key) {
-    if (todayP()[key]) {
-      // a gentle affirmation only when turning ON
-      const lines = { cont: 'Continue. That was the whole practice today.', peace: 'Peace protected. 🤍', create: 'You made something. That counts.', diet: 'Aligned with 75kg her.', water: 'Water — your body says thank you.', noSnacks: 'You kept the agreement.' };
-      if (lines[key]) toast(lines[key]);
-    }
-  }
-
-  /* ================================================================
-     Theme, reminders, import, onboarding
-     ================================================================ */
+  /* ============================ Theme, reminders, import, onboarding ============================ */
   function applyTheme() {
     const t = S.get().settings.theme;
     const dark = t === 'dark' || (t === 'system' && global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-    const meta = $('#theme-color'); if (meta) meta.setAttribute('content', dark ? '#1a1518' : '#fbf7f4');
+    const meta = $('#theme-color'); if (meta) meta.setAttribute('content', dark ? '#171215' : '#fbf7f4');
   }
-
   function toggleReminders() {
     const st = S.get();
     if (!st.settings.reminders) {
       if (global.Notification && Notification.permission !== 'granted') {
-        Notification.requestPermission().then(function (perm) {
-          S.mutate(function () { st.settings.reminders = perm === 'granted'; });
-          if (perm === 'granted') { new Notification('Project 75', { body: 'I’ll gently remind you. Welcome home. 🤍' }); }
-          else toast('Notifications are off in your browser settings.');
-          render();
-        });
+        Notification.requestPermission().then(function (perm) { S.mutate(function () { st.settings.reminders = perm === 'granted'; }); if (perm === 'granted') new Notification('Project 75', { body: 'I’ll gently remind you. Welcome home. 🤍' }); else toast('Notifications are off in your browser settings.'); render(); });
         return;
       }
       S.mutate(function () { st.settings.reminders = true; });
-    } else {
-      S.mutate(function () { st.settings.reminders = false; });
-    }
+    } else { S.mutate(function () { st.settings.reminders = false; }); }
     render();
   }
-
   function maybeRemindNow() {
     const st = S.get();
     if (!st.settings.reminders || !global.Notification || Notification.permission !== 'granted') return;
-    const now = new Date();
-    const [rh, rm] = (st.settings.reminderTime || '07:30').split(':').map(Number);
-    const flag = 'p75:reminded:' + Dates.today();
+    const now = new Date(), rt = (st.settings.reminderTime || '07:30').split(':').map(Number), flag = 'p75:reminded:' + Dates.today();
     if (localStorage.getItem(flag)) return;
-    if (now.getHours() > rh || (now.getHours() === rh && now.getMinutes() >= rm)) {
-      localStorage.setItem(flag, '1');
-      try { new Notification('Good morning. Welcome home.', { body: 'Drink water. Follow today’s plan. Continue.' }); } catch (e) {}
-    }
+    if (now.getHours() > rt[0] || (now.getHours() === rt[0] && now.getMinutes() >= rt[1])) { localStorage.setItem(flag, '1'); try { new Notification('Good morning. Welcome home.', { body: 'Drink water. Follow today’s plan. Continue.' }); } catch (e) {} }
   }
-
   function doImport() {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json,.json';
-    inp.addEventListener('change', function () {
-      const f = inp.files && inp.files[0]; if (!f) return;
-      const r = new FileReader();
-      r.onload = function () { try { Data.import(r.result); applyTheme(); go('today'); toast('Your data is back. Welcome home.'); } catch (e) { toast('That file couldn’t be read.'); } };
-      r.readAsText(f);
-    });
-    inp.click();
+    inp.addEventListener('change', function () { const f = inp.files && inp.files[0]; if (!f) return; const r = new FileReader(); r.onload = function () { try { Data.import(r.result); applyTheme(); go('today'); toast('Your data is back. Welcome home.'); } catch (e) { toast('That file couldn’t be read.'); } }; r.readAsText(f); }); inp.click();
   }
-
   function maybeOnboard() {
-    const st = S.get();
-    if (st.settings.onboarded) return;
-    openSheet({
-      title: 'Welcome home.',
-      subtitle: 'Project 75 — Returning to Her',
+    const st = S.get(); if (st.settings.onboarded) return;
+    openSheet({ title: 'Welcome home.', subtitle: 'Project 75 — Returning to Her',
       bodyHTML: `<p class="ob-copy">This is not a weight-loss app. It’s a soft place to become a healthier, steadier, more intentional woman — over years, not weeks. Let’s set your anchors. You can change these anytime.</p>`,
-      fields: [
-        { name: 'name', label: 'What should I call you?', value: '' },
-        { name: 'startWeight', label: 'Starting weight (kg)', type: 'number', step: '0.1', value: 96 },
-        { name: 'goalWeight', label: 'Goal weight (kg)', type: 'number', step: '0.1', value: 75 },
-        { name: 'heightCm', label: 'Height (cm)', type: 'number', value: 183 }
-      ],
-      submitLabel: 'Begin, gently',
-      onSubmit: function (v) {
-        S.mutate(function () {
-          st.profile.name = v.name || 'Her';
-          st.profile.startWeight = num(v.startWeight) || 96;
-          st.profile.goalWeight = num(v.goalWeight) || 75;
-          st.profile.heightCm = num(v.heightCm) || 183;
-          st.settings.onboarded = true;
-          // reseed the baseline weight to the confirmed start
-          st.weights = [{ date: st.profile.startDate, kg: st.profile.startWeight }];
-        });
-        closeSheet(); render();
-      }
-    });
+      fields: [{ name: 'name', label: 'What should I call you?', value: st.profile.name }, { name: 'startWeight', label: 'Starting weight (kg)', type: 'number', step: '0.1', value: 96 }, { name: 'goalWeight', label: 'Goal weight (kg)', type: 'number', step: '0.1', value: 75 }, { name: 'heightCm', label: 'Height (cm)', type: 'number', value: 183 }],
+      submitLabel: 'Begin, gently', onSubmit: function (v) { S.mutate(function () { st.profile.name = v.name || 'Her'; st.profile.startWeight = num(v.startWeight) || 96; st.profile.goalWeight = num(v.goalWeight) || 75; st.profile.heightCm = num(v.heightCm) || 183; st.settings.onboarded = true; st.weights = [{ date: st.profile.startDate, kg: st.profile.startWeight }]; }); closeSheet(); render(); } });
     const cancel = $('#sheet-form .btn.ghost'); if (cancel) cancel.textContent = 'Skip for now';
   }
-
-  /* ================================================================
-     Achievement celebration
-     ================================================================ */
   function showUnlock(list) {
     const a = list[0];
-    openSheet({
-      title: 'A milestone, softly',
-      bodyHTML: `<div class="unlock"><div class="unlock-icon">${a.icon}</div>
-        <div class="unlock-title">${esc(a.title)}</div>
-        <div class="unlock-note">${esc(a.note)}</div>
-        ${list.length > 1 ? `<div class="muted small">+${list.length - 1} more earned</div>` : ''}</div>`,
-      submitLabel: 'Beautiful', onSubmit: closeSheet
-    });
+    openSheet({ title: 'A milestone, softly', bodyHTML: `<div class="unlock"><div class="unlock-icon">${a.icon}</div><div class="unlock-title">${esc(a.title)}</div><div class="unlock-note">${esc(a.note)}</div>${list.length > 1 ? `<div class="muted small">+${list.length - 1} more earned</div>` : ''}</div>`, submitLabel: 'Beautiful', onSubmit: closeSheet });
   }
 
-  /* ================================================================
-     Boot
-     ================================================================ */
+  /* ============================ Boot ============================ */
   function bindEvents() {
-    document.addEventListener('click', function (e) {
-      const el = e.target.closest('[data-act]');
-      if (!el) return;
-      const act = el.getAttribute('data-act');
-      // let native switches on inputs behave; we handle our own
-      handleAction(act, el, e);
-    });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && e.target && e.target.id === 'food-input') { e.preventDefault(); runFoodCheck(e.target.value); }
-    });
-    document.addEventListener('change', function (e) {
-      if (e.target && e.target.getAttribute && e.target.getAttribute('data-act') === 'set-remind-time') {
-        S.mutate(function (st) { st.settings.reminderTime = e.target.value; });
-        toast('Reminder time updated.');
-      }
-    });
+    document.addEventListener('click', function (e) { const el = e.target.closest('[data-act]'); if (!el) return; handleAction(el.getAttribute('data-act'), el); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target && e.target.id === 'food-input') { e.preventDefault(); runFoodCheck(e.target.value); } });
+    document.addEventListener('change', function (e) { if (e.target && e.target.getAttribute && e.target.getAttribute('data-act') === 'set-remind-time') { S.mutate(function (st) { st.settings.reminderTime = e.target.value; }); toast('Reminder time updated.'); } });
     global.addEventListener('p75:unlocked', function (e) { showUnlock(e.detail); });
-    if (global.matchMedia) {
-      const mq = global.matchMedia('(prefers-color-scheme: dark)');
-      (mq.addEventListener ? mq.addEventListener.bind(mq, 'change') : mq.addListener.bind(mq))(function () { if (S.get().settings.theme === 'system') { applyTheme(); } });
-    }
+    if (global.matchMedia) { const mq = global.matchMedia('(prefers-color-scheme: dark)'); (mq.addEventListener ? mq.addEventListener.bind(mq, 'change') : mq.addListener.bind(mq))(function () { if (S.get().settings.theme === 'system') applyTheme(); }); }
   }
-
   function boot() {
-    S.load();
-    applyTheme();
-    renderHeader();
-    bindEvents();
-    Ach.evaluate();
-    render();
-    maybeOnboard();
-    // update lastOpen AFTER computing the returning banner in first render
+    S.load(); applyTheme(); renderHeader(); bindEvents(); Ach.evaluate(); render(); maybeOnboard();
     setTimeout(function () { S.mutate(function (st) { st.settings.lastOpen = Dates.today(); }); }, 800);
     maybeRemindNow();
-    // service worker
-    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
-      navigator.serviceWorker.register('service-worker.js').catch(function () {});
-    }
+    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('service-worker.js').catch(function () {});
   }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
   global.P75.App = { go: go, render: render };
 })(window);
