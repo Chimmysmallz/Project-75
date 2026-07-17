@@ -4,7 +4,7 @@
    All paths are relative so it works on GitHub Pages project sites
    (e.g. https://user.github.io/project-75/).
    ===================================================================== */
-const CACHE = 'project75-v4';
+const CACHE = 'project75-v5';
 
 const SHELL = [
   './',
