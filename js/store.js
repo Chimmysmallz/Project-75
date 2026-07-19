@@ -65,7 +65,8 @@
         breakfast: ['Coffee + milk', '2 boiled eggs', '1 apple'],
         lunch: ['2 boiled eggs', '1 pear'],
         dinner: ['150g chicken', 'Greek yogurt', '2 eggs'],
-        unlimited: ['Water', 'Ginger tea', 'Green tea', 'Zero-calorie drinks']
+        unlimited: ['Water', 'Ginger tea', 'Green tea', 'Zero-calorie drinks'],
+        cal: { breakfast: 285, lunch: 240, dinner: 250 }
       },
       nonNegotiables: [
         { id: uid(), text: 'No soda', active: true },
@@ -110,7 +111,9 @@
             { id: uid(), text: 'Hot and cold / inconsistent' },
             { id: uid(), text: 'Makes me feel anxious or small' }
           ],
-          people: []
+          people: [],
+          dates: [],
+          goal: 2
         }
       },
       softlife: { travel: [], soloDates: [], moments: [], weekendReset: [], happiness: {} },
@@ -127,6 +130,8 @@
         ]
       },
       office: {},
+      cycle: { periods: [], avgCycle: 28, avgPeriod: 5 },
+      vision: [],
       achievements: {},
       settings: { theme: 'system', reminders: false, reminderTime: '07:30', lastOpen: start, onboarded: false, seeded: false }
     };

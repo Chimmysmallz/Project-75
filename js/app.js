@@ -133,8 +133,26 @@
     nn: ['No soda', 'No office snacks', 'Protein first', '2 litres of water', 'No late-night eating', 'No fried food', 'Follow today’s plan', 'Weigh weekly only', 'No eating when stressed'],
     boundaries: ['Protect my evenings', 'No work after 7pm', 'Say no without guilt', 'Limit draining people', 'Phone away at dinner', 'No lending money I need', 'Rest without apologising', 'Reply when I have capacity'],
     gratitude: ['My health', 'My home', 'My work', 'A good friend', 'My family', 'God', 'A small win today', 'My body', 'Rest', 'This quiet moment'],
-    focus: ['Lose 3kg', 'Save ₦500,000', 'Publish 4 videos', 'Write 20 pages', 'Finish a book chapter', 'Read 2 books', 'Go on 1 intentional date', 'No soda all month', 'Walk 4× a week', 'Meal-prep every Sunday']
+    focus: ['Lose 3kg', 'Save ₦500,000', 'Publish 4 videos', 'Write 20 pages', 'Finish a book chapter', 'Read 2 books', 'Go on 1 intentional date', 'No soda all month', 'Walk 4× a week', 'Meal-prep every Sunday'],
+    offplan: ['Chocolate', 'Cake', 'Office snacks', 'Soda', 'Biscuits', 'Ice cream', 'Fried food', 'Pizza', 'Chips', 'Bread', 'Sweets', 'Meat pie']
   };
+
+  /* Rough calorie estimates for off-plan foods (per typical serving) */
+  const OFFPLAN_CAL = { chocolate: 250, cake: 350, 'office snacks': 200, snacks: 150, soda: 140, biscuits: 140, biscuit: 70, cookie: 120, 'ice cream': 250, 'fried food': 300, fried: 300, pizza: 285, chips: 150, bread: 160, sweets: 60, 'meat pie': 300, juice: 120, burger: 400, fries: 350, donut: 250, doughnut: 250, shawarma: 500, popcorn: 150, 'puff puff': 250, gala: 180 };
+  function calFor(item) { const q = (item || '').toLowerCase(); let best = null; Object.keys(OFFPLAN_CAL).forEach(function (k) { if (q.indexOf(k) !== -1) best = OFFPLAN_CAL[k]; }); return best || 200; }
+  function caloriesToday() {
+    const st = S.get(), t = Dates.today(), m = (st.meals || {})[t] || {}, cal = st.diet.cal || { breakfast: 285, lunch: 240, dinner: 250 };
+    let total = 0;
+    if (m.breakfast) total += cal.breakfast || 0;
+    if (m.lunch) total += cal.lunch || 0;
+    if (m.dinner) total += cal.dinner || 0;
+    st.foodLog.forEach(function (f) { if (f.date === t && f.cal) total += f.cal; });
+    return total;
+  }
+  function plannedCal() { const c = S.get().diet.cal || { breakfast: 285, lunch: 240, dinner: 250 }; return (c.breakfast || 0) + (c.lunch || 0) + (c.dinner || 0); }
+  function graceSheet() {
+    openSheet({ title: 'Noted — no shame.', subtitle: 'Honesty is the whole practice.', bodyHTML: `<div class="wait-water"><div class="wait-emoji">🤍</div><p>One meal is not the story. You didn’t fail — you noticed, and you told the truth. Your next choice is a clean slate. Drink some water, and continue.</p></div>`, submitLabel: 'Continue', onSubmit: closeSheet });
+  }
 
   /* Daily reminder schedule (fires while the app is open/installed) */
   const REMINDERS = [
@@ -163,7 +181,7 @@
     const ov = openSheet({
       title: cfg.title, subtitle: cfg.subtitle || 'Tap to add. Add as many as you like.',
       bodyHTML: `<div class="pick-wrap">${chips}</div><div class="pick-custom"><input type="text" id="pick-input" placeholder="Or write your own…"><button type="button" class="btn ghost small" id="pick-add">Add</button></div>`,
-      submitLabel: cfg.doneLabel || 'Done', onSubmit: function () { closeSheet(); render(); }
+      submitLabel: cfg.doneLabel || 'Done', onSubmit: function () { if (cfg.onDone) { render(); cfg.onDone(); } else { closeSheet(); render(); } }
     });
     const wrap = $('.pick-wrap', ov);
     wrap.addEventListener('click', function (e) { const b = e.target.closest('[data-pick]'); if (!b || b.disabled) return; cfg.onAdd(b.getAttribute('data-pick')); b.classList.add('added'); b.textContent = '✓ ' + b.getAttribute('data-pick'); b.disabled = true; });
@@ -182,6 +200,7 @@
     return card(`${sectionTitle('Today’s diet', `<button class="add-btn" data-act="edit-diet">✎</button>`)}
       <div class="grocery ${m.groceries ? 'done' : ''}"><span>🥚🍎</span><div><b>Today you need</b>eggs, an apple &amp; a pear</div><button class="btn ghost small" data-act="grocery">${m.groceries ? 'Got them ✓' : 'Mark bought'}</button></div>
       <div class="meal-ticks">${meal('breakfast', 'Breakfast')}${meal('lunch', 'Lunch')}${meal('dinner', 'Dinner')}</div>
+      <div class="cal-line"><div><span class="cal-label">Calories today</span><b class="cal-val">~${caloriesToday()} kcal</b></div><i>plan ≈ ${plannedCal()} kcal · a gentle estimate, not a rule</i></div>
       <div class="diet-grid">${sec('Breakfast', d.breakfast)}${sec('Lunch', d.lunch)}${sec('Dinner — choose one', d.dinner)}${sec('Unlimited', d.unlimited)}</div>
       <p class="muted small">Repetition is the strategy. Fewer decisions, fewer chances to negotiate.</p>`, 'diet-card');
   }
@@ -249,11 +268,15 @@
 
       <p class="affirmation">${esc(dailyAffirmation())}</p>
 
+      ${(function () { const ph = cyclePhase(); return ph && ph.pms ? card(`<div class="nudge"><span class="nudge-ico">🌸</span><div class="nudge-copy"><b>Be extra gentle today.</b><span>You’re in your luteal phase — cravings and a heavier scale are hormonal, not failure.</span></div></div>`, 'nudge-card') : ''; })()}
+
       ${reached ? card(`<div class="forever-mini"><div class="forever-badge">✦</div>
         <div class="forever-copy"><b>You made it to her.</b><span>Project 75 is now Project Forever.</span></div>
         <button class="btn ghost small" data-act="go-forever">What next →</button></div>`, 'forever-mini-card') : ''}
 
       ${reachOutNudge()}
+
+      ${dateNudge()}
 
       ${card(`<div class="today-top">${ringHTML}<div class="today-stats">
         ${tile('Promise Score', score + '%', 'last 30 days')}${tile('Streak', streak + (streak === 1 ? ' day' : ' days'), 'gently counted')}</div></div>`, 'today-hero')}
@@ -281,12 +304,10 @@
   /* ============================ VIEW: BODY ============================ */
   function viewBody() {
     const seg = App.seg.body || 'weight';
-    const inner = seg === 'food' ? bodyFood() : seg === 'future' ? bodyFuture() : bodyWeight();
+    const inner = seg === 'food' ? bodyFood() : seg === 'cycle' ? bodyCycle() : seg === 'future' ? bodyFuture() : bodyWeight();
+    const tab = function (v, label) { return `<button class="${seg === v ? 'on' : ''}" data-act="seg" data-group="body" data-val="${v}">${label}</button>`; };
     return `<div class="view"><header class="page-head"><h1>Your Body</h1><p>Kind, honest, unhurried.</p></header>
-      <div class="segmented" data-seg="body">
-        <button class="${seg === 'weight' ? 'on' : ''}" data-act="seg" data-group="body" data-val="weight">Weight</button>
-        <button class="${seg === 'food' ? 'on' : ''}" data-act="seg" data-group="body" data-val="food">Food</button>
-        <button class="${seg === 'future' ? 'on' : ''}" data-act="seg" data-group="body" data-val="future">Future Her</button></div>${inner}</div>`;
+      <div class="segmented scroll" data-seg="body">${tab('weight', 'Weight')}${tab('food', 'Food')}${tab('cycle', 'Cycle')}${tab('future', 'Future Her')}</div>${inner}</div>`;
   }
 
   function bodyWeight() {
@@ -341,26 +362,59 @@
         <div class="food-quick">${['Office cake', 'Soda', 'Chocolate', 'Office snacks', 'Chicken', 'Greek yogurt'].map(function (x) { return `<button class="tag" data-act="food-quick" data-q="${esc(x)}">${esc(x)}</button>`; }).join('')}</div>
         <div id="food-verdict" class="food-verdict"></div>`)}
 
+      ${card(`${sectionTitle('Already ate something off-plan?')}<p class="muted small">No shame — just note it. Honesty is what makes this work, and it keeps your calorie estimate honest too.</p><button class="btn ghost full" data-act="note-offplan">Note it, kindly</button>`)}
+
       ${card(`${sectionTitle('Non-negotiables', addBtn('add-nn'))}
         <div class="nn-list">${nn.map(function (n) { return `<div class="nn-row ${n.active ? 'on' : ''}"><button class="nn-toggle" data-act="toggle-nn" data-id="${n.id}">${n.active ? '◆' : '◇'}</button><span>${esc(n.text)}</span><button class="nn-del" data-act="del-nn" data-id="${n.id}">✕</button></div>`; }).join('')}</div>
         <p class="muted small">These aren’t rules to break. They’re agreements you already made with her.</p>`)}
 
       ${card(`${sectionTitle('Food notes')}
-        ${log.length ? `<div class="rows">` + log.map(function (f) { return `<div class="row"><div><b>${esc(f.item)}</b><i>${esc(Dates.prettyShort(f.date))}</i></div><span class="verdict-pill ${f.verdict}">${f.verdict === 'yes' ? 'Aligned' : f.verdict === 'no' ? 'Off-plan' : 'Noted'}</span></div>`; }).join('') + `</div>` : listEmpty('Nothing logged yet. Every honest note counts.')}`)}`;
+        ${log.length ? `<div class="rows">` + log.map(function (f) { return `<div class="row"><div><b>${esc(f.item)}</b><i>${esc(Dates.prettyShort(f.date))}${f.cal ? ' · ~' + f.cal + ' kcal' : ''}</i></div><span class="verdict-pill ${f.verdict}">${f.verdict === 'yes' ? 'Aligned' : f.verdict === 'no' ? 'Off-plan' : 'Noted'}</span></div>`; }).join('') + `</div>` : listEmpty('Nothing logged yet. Every honest note counts.')}`)}`;
   }
 
+  function cyclePhase() {
+    const c = S.get().cycle;
+    if (!c || !c.periods || !c.periods.length) return null;
+    const last = c.periods.slice().sort()[c.periods.length - 1];
+    const elapsed = Dates.diffDays(last, Dates.today());
+    if (elapsed < 0) return null;
+    const avg = c.avgCycle || 28, period = c.avgPeriod || 5;
+    const day = (elapsed % avg) + 1;
+    let phase, emoji, pms = false, message;
+    if (day <= period) { phase = 'Menstrual'; emoji = '🌙'; message = 'Rest is productive. Lower energy is expected, and any weight up is water — not fat. Be gentle with yourself.'; }
+    else if (day <= 13) { phase = 'Follicular'; emoji = '🌱'; message = 'Energy is rising. A good window for movement and momentum.'; }
+    else if (day <= 16) { phase = 'Ovulation'; emoji = '☀️'; message = 'Peak energy and confidence. Ride it.'; }
+    else { phase = 'Luteal'; emoji = '🌸'; if (day >= avg - 4) { pms = true; message = 'Cravings are hormonal right now — not failure. Protein and water help. The scale may rise 1–2kg from water; it passes.'; } else { message = 'Winding down. Prioritise protein, water and sleep.'; } }
+    const nextStart = Dates.addDays(last, avg), daysUntil = Dates.diffDays(Dates.today(), nextStart);
+    return { day: day, phase: phase, emoji: emoji, pms: pms, message: message, nextStart: nextStart, daysUntil: daysUntil };
+  }
+  function bodyCycle() {
+    const c = S.get().cycle, ph = cyclePhase();
+    const periods = (c.periods || []).slice().sort().reverse();
+    return `
+      ${ph ? card(`<div class="cycle-hero"><div class="cycle-emoji">${ph.emoji}</div><div class="cycle-day">Day ${ph.day}</div><div class="cycle-phase">${ph.phase} phase</div>
+        <div class="cycle-next">${ph.daysUntil >= 0 ? 'Next period in about ' + ph.daysUntil + ' day' + (ph.daysUntil === 1 ? '' : 's') : 'Expected around now — ' + Math.abs(ph.daysUntil) + 'd past the estimate'}</div></div>
+        <div class="cycle-msg ${ph.pms ? 'pms' : ''}">${ph.message}</div>`, 'cycle-card')
+        : card(`<div class="cycle-empty"><div class="cycle-emoji">🌙</div><p>Log your last period start to see your phase, your next date, and gentle context for cravings and weight.</p></div>`, 'cycle-card')}
+      ${card(`<div class="cta-row"><button class="btn primary" data-act="log-period">Log period start</button><span class="cta-note">Understanding your cycle takes the shame out of a heavy week.</span></div>`)}
+      ${card(`${sectionTitle('Cycle settings', `<button class="add-btn" data-act="edit-cycle">✎</button>`)}<div class="weight-grid"><div>${tile('Cycle length', (c.avgCycle || 28) + 'd')}</div><div>${tile('Period length', (c.avgPeriod || 5) + 'd')}</div></div>`)}
+      ${card(`${sectionTitle('Recent periods')}${periods.length ? `<div class="rows">` + periods.map(function (p) { return `<div class="row"><div><b>${esc(Dates.prettyFull(p))}</b></div><button class="nn-del" data-act="del-period" data-d="${p}">✕</button></div>`; }).join('') + `</div>` : listEmpty('No periods logged yet.')}`)}`;
+  }
   function bodyFuture() {
+    const vision = S.get().vision || [];
     return `${card(`<div class="future-her"><div class="fh-halo">🤍</div><h2>What would 75kg her do?</h2>
       <ul class="fh-list"><li>Eats intentionally.</li><li>Doesn’t negotiate with herself.</li><li>Drinks water.</li><li>Sleeps properly.</li><li>Protects her peace.</li><li>Continues.</li></ul>
       <p class="fh-close">You don’t have to become her. You’re returning to her.</p></div>`, 'future-card')}
+      ${card(`${sectionTitle('Vision board', addBtn('add-vision'))}<p class="muted small">Images of the life you’re returning to. Look at her often.</p>
+        ${vision.length ? `<div class="gallery">` + vision.slice().reverse().map(function (v) { return `<figure class="shot"><img alt="vision" data-load="${v.mediaId}"><button class="shot-del" data-act="del-vision" data-id="${v.id}" data-mid="${v.mediaId}">✕</button></figure>`; }).join('') + `</div>` : listEmpty('Add photos that feel like her — places, outfits, moments, goals.')}`)}
       ${card(`${sectionTitle('A letter waiting for you')}<p class="muted">When it’s hard, open the Vault and read what you wrote to yourself.</p><button class="btn ghost" data-act="go-vault">Open the Vault</button>`)}`;
   }
 
   /* ============================ VIEW: RESETS ============================ */
   function viewResets() {
     const seg = App.seg.resets || 'content';
-    const tabs = [['content', 'Content'], ['wealth', 'Money'], ['love', 'Love'], ['soft', 'Soft Life'], ['beautiful', 'Beautiful']];
-    const inner = ({ content: resetContent, wealth: resetWealth, love: resetLove, soft: resetSoft, beautiful: resetBeautiful })[seg]();
+    const tabs = [['content', 'Content'], ['wealth', 'Money'], ['love', 'Love'], ['dating', 'Dating'], ['soft', 'Soft Life'], ['beautiful', 'Beautiful']];
+    const inner = ({ content: resetContent, wealth: resetWealth, love: resetLove, dating: resetDating, soft: resetSoft, beautiful: resetBeautiful })[seg]();
     return `<div class="view"><header class="page-head"><h1>Resets</h1><p>A whole life, not just a body.</p></header>
       <div class="segmented scroll" data-seg="resets">${tabs.map(function (t) { return `<button class="${seg === t[0] ? 'on' : ''}" data-act="seg" data-group="resets" data-val="${t[0]}">${t[1]}</button>`; }).join('')}</div>${inner}</div>`;
   }
@@ -429,15 +483,41 @@
   }
 
   function ensureDating(st) {
-    const L = st.love; if (!L.dating2) L.dating2 = { standards: [], green: [], red: [], people: [] };
-    ['standards', 'green', 'red', 'people'].forEach(function (k) { if (!L.dating2[k]) L.dating2[k] = []; });
+    const L = st.love; if (!L.dating2) L.dating2 = { standards: [], green: [], red: [], people: [], dates: [], goal: 2 };
+    ['standards', 'green', 'red', 'people', 'dates'].forEach(function (k) { if (!L.dating2[k]) L.dating2[k] = []; });
+    if (L.dating2.goal == null) L.dating2.goal = 2;
     return L.dating2;
+  }
+  const DATE_IDEAS = ['Coffee somewhere beautiful', 'A gallery or museum', 'A sunset walk', 'Try a new restaurant', 'Cook a meal together', 'Live music', 'Browse a bookshop', 'Board games & mocktails', 'The beach or waterfront', 'A farmers’ market', 'A dessert date', 'A class together — pottery, dance, art', 'A picnic', 'A spa afternoon (a solo date counts!)'];
+  function datesThisMonth() { const d = S.get().love.dating2; if (!d || !d.dates) return 0; const mk = M.currentMonthKey(); return d.dates.filter(function (x) { return Dates.monthKey(x.date) === mk; }).length; }
+  function dateNudge() {
+    const d = S.get().love && S.get().love.dating2; if (!d) return '';
+    const dates = d.dates || [], goal = d.goal || 2, count = datesThisMonth();
+    if (count >= goal) return '';
+    const last = dates.length ? dates.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[dates.length - 1].date : null;
+    if (last && Dates.diffDays(last, Dates.today()) < 10) return ''; // dated recently — ease off
+    const weeks = last ? Math.max(1, Math.floor(Dates.diffDays(last, Dates.today()) / 7)) : null;
+    const line = last ? ('It’s been ' + weeks + ' week' + (weeks === 1 ? '' : 's') + ' since your last date. Plan another this week. 💗') : 'You wanted intentional love. It starts with one yes. Plan a date this week. 💗';
+    return card(`<div class="nudge"><span class="nudge-ico">💗</span><div class="nudge-copy"><b>Go on a date this week.</b><span>${esc(line)}</span></div><button class="btn ghost small" data-act="go-dating">Plan</button></div>`, 'nudge-card');
+  }
+  function planDate() {
+    const idea = DATE_IDEAS[Math.floor(Math.random() * DATE_IDEAS.length)];
+    const ov = openSheet({ title: 'Plan a date', subtitle: '75kg her chooses — she doesn’t wait to be chosen.', bodyHTML: `<div class="wait-water"><div class="wait-emoji">💗</div><p style="font-size:18px;font-weight:600;color:var(--rose-deep)">${esc(idea)}</p><p class="muted small">Pick a day this week. Text someone — or take yourself. A solo date absolutely counts.</p></div>`, submitLabel: 'I’ll make it happen', onSubmit: function () { closeSheet(); toast('Yes. Put it in your calendar. 💗'); } });
+    const actions = $('.sheet-actions', ov); if (actions && actions.lastChild) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost'; b.textContent = 'Another idea'; b.addEventListener('click', function () { planDate(); }); actions.insertBefore(b, actions.lastChild); }
   }
   function datingSection() {
     const d = ensureDating(S.get());
     const chips = function (arr, delAct, empty) { return arr.length ? arr.map(function (x) { return `<span class="dchip">${esc(x.text)}<button data-act="${delAct}" data-id="${x.id}" aria-label="remove">✕</button></span>`; }).join('') : `<span class="muted small">${empty}</span>`; };
     const STATUS = { Talking: 'talking', Dating: 'dating', Paused: 'paused', Ended: 'ended' };
+    const count = datesThisMonth(), goal = d.goal || 2;
+    const pushLine = count >= goal ? 'You showed up for your own love life this month. Proud of you. 🤍' : count > 0 ? 'One down — keep the momentum. You deserve to pursue and to be pursued.' : 'You said you wanted intentional love. It starts with one yes. Plan a date this week.';
+    const recent = (d.dates || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 8);
     return `
+      ${card(`${sectionTitle('Go on dates 💗', `<button class="add-btn" data-act="set-date-goal">✎</button>`)}
+        <div class="date-goal"><div class="date-goal-num">${count}<span>/${goal}</span></div><div class="date-goal-lab">intentional dates<br>this month</div></div>
+        <p class="push-line">${pushLine}</p>
+        <div class="cta-row two"><button class="btn primary" data-act="plan-date">Plan a date</button><button class="btn ghost" data-act="log-date">I went on a date</button></div>`, 'datepush-card')}
+
       ${card(`${sectionTitle('Dating — my standards', addBtn('add-standard'))}
         <p class="muted small">Decide who you’re becoming intentional for — before the feelings, not after.</p>
         <div class="dchips">${chips(d.standards, 'del-standard', 'Add what you want and won’t compromise.')}</div>`)}
@@ -456,9 +536,14 @@
             ${p.notes ? `<div class="dp-notes">${esc(p.notes)}</div>` : ''}
             <div class="dp-reflect">Do they meet your standards?</div></button>
             <button class="nn-del" data-act="del-date-person" data-id="${p.id}">✕</button></div>`;
-        }).join('') + `</div>` : listEmpty('No one yet — and that’s perfectly fine. Intentional means unhurried.')}`)}`;
+        }).join('') + `</div>` : listEmpty('No one yet — and that’s perfectly fine. Intentional means unhurried.')}`)}
+
+      ${card(`${sectionTitle('Dates you’ve been on')}${recent.length ? `<div class="rows">` + recent.map(function (x) { return `<div class="row"><div><b>${esc(x.who || 'Solo date')}</b><i>${esc(Dates.prettyShort(x.date))}${x.place ? ' · ' + esc(x.place) : ''}${x.felt ? ' · ' + esc(x.felt) : ''}</i></div><button class="nn-del" data-act="del-date" data-id="${x.id}">✕</button></div>`; }).join('') + `</div>` : listEmpty('No dates logged yet. Your first intentional one is waiting.')}`)}`;
   }
 
+  function resetDating() {
+    return `${card(`<div class="quote-block">“Dating on purpose. Never out of loneliness.”</div>`, 'quote')}${datingSection()}`;
+  }
   function resetLove() {
     const commits = S.get().love.commitments || [], people = S.get().people || [];
     return `
@@ -476,7 +561,6 @@
             <div class="person-actions"><button class="btn ghost small" data-act="reached" data-id="${pn.id}">I reached out</button><button class="chip-btn" data-act="edit-person" data-id="${pn.id}">✎</button><button class="nn-del" data-act="del-person" data-id="${pn.id}">✕</button></div></div>`;
         }).join('') + `</div>` : listEmpty('No one added yet. Start with your parents and a close friend.')}`)}
 
-      ${datingSection()}
       ${loveList('boundaries', 'Boundaries', 'add-love:boundaries', 'A boundary is a form of self-love.')}
       ${loveList('memories', 'Beautiful memories', 'add-love:memories', 'The moments worth keeping.')}`;
   }
@@ -538,6 +622,7 @@
         <p class="muted small center">Did you keep at least one promise to yourself today? If yes — today counts.</p>`)}
       ${card(`${sectionTitle('This week')}${bars}<p class="muted small center">Each bar is a day you showed up. Empty days are rest, not failure.</p>`)}
       ${card(`${sectionTitle('Reports')}<div class="report-btns"><button class="btn ghost" data-act="report" data-kind="weekly">Weekly</button><button class="btn ghost" data-act="report" data-kind="monthly">Monthly</button><button class="btn ghost" data-act="report" data-kind="quarterly">Quarterly</button></div><div id="report-out" class="report-out"></div>`)}
+      ${card(`${sectionTitle('Share your progress')}<p class="muted small">A beautiful card of how far you’ve come — save it or share it.</p><button class="btn primary full" data-act="share-progress">Create my progress card</button>`)}
       ${card(`${sectionTitle('Achievements')}<p class="muted small">${unlocked.length} of ${Ach.catalog.length} earned so far.</p><div class="badge-grid">${badges}</div>`)}</div>`;
   }
 
@@ -620,6 +705,7 @@
     const res = Food.classify(q), box = $('#food-verdict'); if (!box) return;
     box.className = 'food-verdict show ' + res.verdict;
     box.innerHTML = `<div class="fv-title">${esc(res.title)}</div><div class="fv-msg">${esc(res.message)}</div><div class="fv-reason">${esc(res.reason || '')}</div>
+      ${res.verdict === 'no' ? `<div class="fv-joke">${esc(Food.joke())}</div>` : ''}
       <div class="fv-actions"><button class="btn ghost small" data-act="food-log" data-item="${esc(res.item)}" data-verdict="${res.verdict}">Note it</button>${res.verdict === 'no' ? `<button class="btn primary small" data-act="wait20">I really want it →</button>` : ''}</div>`;
   }
   function hungerSet(n) {
@@ -750,7 +836,7 @@
 
       case 'food-check': { const q = $('#food-input') ? $('#food-input').value : ''; runFoodCheck(q); break; }
       case 'food-quick': { const q = el.getAttribute('data-q'), inp = $('#food-input'); if (inp) inp.value = q; runFoodCheck(q); break; }
-      case 'food-log': S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: el.getAttribute('data-item'), verdict: el.getAttribute('data-verdict') }); }); toast('Noted honestly.'); App.seg.body = 'food'; render(); break;
+      case 'food-log': { const verdict = el.getAttribute('data-verdict'), item = el.getAttribute('data-item'); S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: item, verdict: verdict, cal: verdict === 'no' ? calFor(item) : null }); }); App.seg.body = 'food'; render(); toast(verdict === 'no' ? 'Noted — no shame. Your next choice is a clean slate.' : 'Noted honestly.'); break; }
 
       case 'toggle-nn': S.mutate(function () { const n = st.nonNegotiables.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (n) n.active = !n.active; }); render(); break;
       case 'del-nn': S.mutate(function () { st.nonNegotiables = st.nonNegotiables.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
@@ -763,7 +849,7 @@
 
       case 'quick-gratitude': openSheet({ title: 'One good thing', subtitle: 'That’s all today asks.', fields: [{ name: 'text', label: 'Today I’m grateful for…', type: 'textarea', rows: 3 }], submitLabel: 'Keep it', onSubmit: function (v) { if (v.text) S.mutate(function () { st.beautiful.gratitude.push({ id: S.uid(), date: Dates.today(), text: v.text }); }); closeSheet(); toast('Kept. 🌸'); } }); break;
 
-      case 'edit-diet': { const d = st.diet; openSheet({ title: 'Your diet', subtitle: 'One item per line.', fields: [{ name: 'breakfast', label: 'Breakfast', type: 'textarea', rows: 3, value: d.breakfast.join('\n') }, { name: 'lunch', label: 'Lunch', type: 'textarea', rows: 3, value: d.lunch.join('\n') }, { name: 'dinner', label: 'Dinner — choose one', type: 'textarea', rows: 3, value: d.dinner.join('\n') }, { name: 'unlimited', label: 'Unlimited', type: 'textarea', rows: 3, value: d.unlimited.join('\n') }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.diet = { breakfast: splitLines(v.breakfast), lunch: splitLines(v.lunch), dinner: splitLines(v.dinner), unlimited: splitLines(v.unlimited) }; }); closeSheet(); render(); } }); break; }
+      case 'edit-diet': { const d = st.diet; const cal = d.cal || { breakfast: 285, lunch: 240, dinner: 250 }; openSheet({ title: 'Your diet', subtitle: 'One item per line. Calories are rough estimates.', fields: [{ name: 'breakfast', label: 'Breakfast', type: 'textarea', rows: 3, value: d.breakfast.join('\n') }, { name: 'bcal', label: 'Breakfast kcal (estimate)', type: 'number', value: cal.breakfast }, { name: 'lunch', label: 'Lunch', type: 'textarea', rows: 3, value: d.lunch.join('\n') }, { name: 'lcal', label: 'Lunch kcal (estimate)', type: 'number', value: cal.lunch }, { name: 'dinner', label: 'Dinner — choose one', type: 'textarea', rows: 3, value: d.dinner.join('\n') }, { name: 'dcal', label: 'Dinner kcal (estimate)', type: 'number', value: cal.dinner }, { name: 'unlimited', label: 'Unlimited', type: 'textarea', rows: 3, value: d.unlimited.join('\n') }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.diet = { breakfast: splitLines(v.breakfast), lunch: splitLines(v.lunch), dinner: splitLines(v.dinner), unlimited: splitLines(v.unlimited), cal: { breakfast: num(v.bcal) || 0, lunch: num(v.lcal) || 0, dinner: num(v.dcal) || 0 } }; }); closeSheet(); render(); } }); break; }
 
       default: if (!handleMore(act, el)) handleVaultAndSettings(act, el); break;
     }
@@ -815,6 +901,20 @@
       case 'add-date-person': openSheet({ title: 'Someone I’m seeing', fields: [{ name: 'name', label: 'Name' }, { name: 'status', label: 'Status', type: 'select', options: ['Talking', 'Dating', 'Paused', 'Ended'], value: 'Talking' }, { name: 'notes', label: 'How do they meet your standards?', type: 'textarea', rows: 3 }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { ensureDating(st).people.push({ id: S.uid(), name: v.name, status: v.status || 'Talking', notes: v.notes || '' }); }); closeSheet(); render(); } }); return true;
       case 'edit-date-person': { const id = el.getAttribute('data-id'); const p = ensureDating(st).people.find(function (x) { return x.id === id; }); if (!p) return true; openSheet({ title: p.name, subtitle: 'Honest notes. This is for you.', fields: [{ name: 'name', label: 'Name', value: p.name }, { name: 'status', label: 'Status', type: 'select', options: ['Talking', 'Dating', 'Paused', 'Ended'], value: p.status }, { name: 'notes', label: 'How do they meet your standards?', type: 'textarea', rows: 4, value: p.notes }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { p.name = v.name || p.name; p.status = v.status; p.notes = v.notes; }); closeSheet(); render(); } }); return true; }
       case 'del-date-person': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.people = d.people.filter(function (x) { return x.id !== id; }); }); render(); return true; }
+
+      case 'go-dating': go('resets'); App.seg.resets = 'dating'; render(); return true;
+      case 'plan-date': planDate(); return true;
+      case 'log-date': openSheet({ title: 'I went on a date', subtitle: 'Log it — solo or with someone. It all counts.', fields: [{ name: 'date', label: 'When', type: 'date', value: Dates.today() }, { name: 'who', label: 'With (leave blank for a solo date)' }, { name: 'place', label: 'Where / what' }, { name: 'felt', label: 'How did it feel?', type: 'select', options: ['Amazing', 'Good', 'Okay', 'Not for me'] }], submitLabel: 'Log it', onSubmit: function (v) { S.mutate(function () { ensureDating(st).dates.push({ id: S.uid(), date: v.date || Dates.today(), who: v.who || '', place: v.place || '', felt: v.felt || '' }); }); closeSheet(); render(); toast('You showed up for yourself. 💗'); } }); return true;
+      case 'del-date': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.dates = d.dates.filter(function (x) { return x.id !== id; }); }); render(); return true; }
+      case 'set-date-goal': openSheet({ title: 'Monthly date goal', subtitle: 'How many intentional dates a month?', fields: [{ name: 'goal', label: 'Dates per month', type: 'number', value: ensureDating(st).goal }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { ensureDating(st).goal = num(v.goal) || 1; }); closeSheet(); render(); } }); return true;
+
+      case 'log-period': openSheet({ title: 'Log period start', subtitle: 'No judgement — just knowledge.', fields: [{ name: 'date', label: 'Start date', type: 'date', value: Dates.today() }], submitLabel: 'Save', onSubmit: function (v) { const d = v.date || Dates.today(); S.mutate(function () { st.cycle = st.cycle || { periods: [], avgCycle: 28, avgPeriod: 5 }; if (st.cycle.periods.indexOf(d) === -1) st.cycle.periods.push(d); }); closeSheet(); render(); toast('Logged, kindly.'); } }); return true;
+      case 'edit-cycle': openSheet({ title: 'Cycle settings', fields: [{ name: 'avgCycle', label: 'Average cycle length (days)', type: 'number', value: (st.cycle && st.cycle.avgCycle) || 28 }, { name: 'avgPeriod', label: 'Average period length (days)', type: 'number', value: (st.cycle && st.cycle.avgPeriod) || 5 }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.cycle = st.cycle || { periods: [] }; st.cycle.avgCycle = num(v.avgCycle) || 28; st.cycle.avgPeriod = num(v.avgPeriod) || 5; }); closeSheet(); render(); } }); return true;
+      case 'del-period': { const d = el.getAttribute('data-d'); S.mutate(function () { st.cycle.periods = (st.cycle.periods || []).filter(function (x) { return x !== d; }); }); render(); return true; }
+      case 'add-vision': pickImage(async function (blob) { const mid = await Media.put(blob, { type: blob.type }); S.mutate(function () { ensure(st, 'vision', []); st.vision.push({ id: S.uid(), date: Dates.today(), mediaId: mid }); }); render(); toast('Added to your vision board. 🤍'); }); return true;
+      case 'del-vision': { const id = el.getAttribute('data-id'), mid = el.getAttribute('data-mid'); confirmSheet('Remove this image?', '', 'Remove', function () { Media.del(mid); S.mutate(function () { st.vision = (st.vision || []).filter(function (x) { return x.id !== id; }); }); render(); }, true); return true; }
+      case 'share-progress': shareProgress(); return true;
+      case 'note-offplan': openPicker({ title: 'What did you have?', subtitle: 'Tap it. No judgement — just the truth.', suggestions: SUGGEST.offplan, onAdd: function (t) { S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: t, verdict: 'no', cal: calFor(t) }); }); }, onDone: graceSheet }); return true;
 
       case 'edit-money': openSheet({ title: 'The money page', fields: [{ name: 'salary', label: 'Salary (₦)', type: 'number', value: st.wealth.salary }, { name: 'rentGoal', label: 'Rent goal (₦)', type: 'number', value: st.wealth.rentGoal }, { name: 'rentSavings', label: 'Rent saved so far (₦)', type: 'number', value: st.wealth.rentSavings }, { name: 'emergencyFund', label: 'Emergency fund (₦)', type: 'number', value: st.wealth.emergencyFund }, { name: 'carFund', label: 'Car fund (₦)', type: 'number', value: st.wealth.carFund }, { name: 'transport', label: 'Transport (₦)', type: 'number', value: st.wealth.transport }, { name: 'food', label: 'Food (₦)', type: 'number', value: st.wealth.food }, { name: 'gifts', label: 'Gifts (₦)', type: 'number', value: st.wealth.gifts }, { name: 'perfumeFund', label: 'Perfume fund (₦)', type: 'number', value: st.wealth.perfumeFund }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { const w = st.wealth; w.salary = num(v.salary); w.rentGoal = num(v.rentGoal); w.rentSavings = num(v.rentSavings) || 0; w.emergencyFund = num(v.emergencyFund) || 0; w.carFund = num(v.carFund) || 0; w.transport = num(v.transport) || 0; w.food = num(v.food) || 0; w.gifts = num(v.gifts) || 0; w.perfumeFund = num(v.perfumeFund) || 0; }); closeSheet(); render(); } }); return true;
       case 'add-sub': openSheet({ title: 'Subscription', fields: [{ name: 'name', label: 'Name' }, { name: 'amount', label: 'Monthly (₦)', type: 'number' }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { st.wealth.subscriptions.push({ id: S.uid(), name: v.name, amount: num(v.amount) || 0 }); }); closeSheet(); render(); } }); return true;
@@ -928,9 +1028,43 @@
       submitLabel: 'Begin, gently', onSubmit: function (v) { S.mutate(function () { st.profile.name = v.name || 'Her'; st.profile.startWeight = num(v.startWeight) || 96; st.profile.goalWeight = num(v.goalWeight) || 75; st.profile.heightCm = num(v.heightCm) || 183; st.settings.onboarded = true; st.weights = [{ date: st.profile.startDate, kg: st.profile.startWeight }]; }); closeSheet(); render(); } });
     const cancel = $('#sheet-form .btn.ghost'); if (cancel) cancel.textContent = 'Skip for now';
   }
+  function confetti() {
+    if (global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const c = document.createElement('div'); c.className = 'confetti';
+    const colors = ['#F3B7C6', '#E38AA0', '#D8B36A', '#C7E6C9', '#B7A6C4', '#F7D9C7'];
+    for (let i = 0; i < 48; i++) { const p = document.createElement('i'); p.style.left = (Math.random() * 100) + '%'; p.style.background = colors[i % colors.length]; p.style.animationDelay = (Math.random() * 0.6).toFixed(2) + 's'; p.style.setProperty('--r', (Math.random() * 360) + 'deg'); c.appendChild(p); }
+    document.body.appendChild(c); setTimeout(function () { c.remove(); }, 3200);
+  }
   function showUnlock(list) {
-    const a = list[0];
+    const a = list[0]; confetti();
     openSheet({ title: 'A milestone, softly', bodyHTML: `<div class="unlock"><div class="unlock-icon">${a.icon}</div><div class="unlock-title">${esc(a.title)}</div><div class="unlock-note">${esc(a.note)}</div>${list.length > 1 ? `<div class="muted small">+${list.length - 1} more earned</div>` : ''}</div>`, submitLabel: 'Beautiful', onSubmit: closeSheet });
+  }
+
+  /* Draw a soft-luxury progress card and share/save it as an image. */
+  function shareProgress() {
+    const W = 1080, H = 1350, cvs = document.createElement('canvas'); cvs.width = W; cvs.height = H;
+    const x = cvs.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#FCE9EC'); g.addColorStop(1, '#F7D9C7'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+    x.textAlign = 'center';
+    x.fillStyle = '#C6798A'; x.font = '700 64px Georgia, serif'; x.fillText('PROJECT 75', W / 2, 155);
+    x.font = 'italic 40px Georgia, serif'; x.fillText('Returning to Her', W / 2, 214);
+    const cx = W / 2, cy = 520, r = 190, pct = M.percentToGoal();
+    x.lineWidth = 34; x.lineCap = 'round';
+    x.strokeStyle = 'rgba(198,121,138,0.18)'; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.stroke();
+    const grd = x.createLinearGradient(cx - r, cy - r, cx + r, cy + r); grd.addColorStop(0, '#F3B7C6'); grd.addColorStop(1, '#E38AA0');
+    x.strokeStyle = grd; x.beginPath(); x.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (pct / 100)); x.stroke();
+    x.fillStyle = '#3B2F31'; x.font = '700 100px -apple-system, Arial, sans-serif'; x.fillText(pct + '%', cx, cy + 22);
+    x.fillStyle = '#6E5E62'; x.font = '400 34px -apple-system, Arial, sans-serif'; x.fillText('to goal', cx, cy + 76);
+    const stats = [['Current', M.currentWeight() + 'kg'], ['Lost', M.totalLost() + 'kg'], ['Promise', M.promiseScore(30) + '%']];
+    stats.forEach(function (s, i) { const sx = W / 2 + (i - 1) * 310; x.fillStyle = '#C6798A'; x.font = '700 60px -apple-system, Arial, sans-serif'; x.fillText(s[1], sx, 900); x.fillStyle = '#6E5E62'; x.font = '400 30px -apple-system, Arial, sans-serif'; x.fillText(s[0], sx, 948); });
+    x.fillStyle = '#3B2F31'; x.font = 'italic 40px Georgia, serif'; x.fillText(M.streak() + '-day streak, gently counted', W / 2, 1050);
+    x.fillStyle = '#C6798A'; x.font = 'italic 46px Georgia, serif'; x.fillText('A beautiful life is also a goal.', W / 2, 1240);
+    cvs.toBlob(function (blob) {
+      if (!blob) { toast('Could not create the card.'); return; }
+      const file = new File([blob], 'project-75-progress.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: 'Project 75', text: 'My progress 🤍' }).catch(function () {}); }
+      else { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'project-75-progress.png'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000); toast('Saved your progress card. 🤍'); }
+    }, 'image/png');
   }
 
   /* ============================ Boot ============================ */
@@ -943,10 +1077,13 @@
   }
   function boot() {
     S.load(); applyTheme(); renderHeader(); bindEvents(); Ach.evaluate(); render(); maybeOnboard();
+    // Ask the browser not to evict our data — keeps history through storage pressure.
+    if (navigator.storage && navigator.storage.persist) { try { navigator.storage.persist(); } catch (e) {} }
     setTimeout(function () { S.mutate(function (st) { st.settings.lastOpen = Dates.today(); }); }, 800);
     checkReminders();
     setInterval(checkReminders, 300000);
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkReminders(); else S.save(); });
+    window.addEventListener('pagehide', function () { S.save(); });
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('service-worker.js').catch(function () {});
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

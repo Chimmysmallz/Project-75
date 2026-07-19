@@ -644,6 +644,47 @@
   .rem-time { font-weight: 700; font-size: 12.5px; color: var(--rose-deep); min-width: 46px; }
   .rem-text { font-size: 13px; }
 
+  /* Cycle */
+  .cycle-card { background: linear-gradient(160deg,#F7EAF2,#F3DCE8); text-align: center; }
+  html[data-theme="dark"] .cycle-card { background: var(--card); }
+  .cycle-hero { padding: 6px 0; }
+  .cycle-emoji { font-size: 44px; }
+  .cycle-day { font-family: var(--serif); font-size: 30px; font-weight: 600; margin-top: 4px; }
+  .cycle-phase { font-size: 15px; font-weight: 600; color: var(--mauve); }
+  .cycle-next { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
+  .cycle-msg { margin-top: 14px; padding: 14px; border-radius: var(--radius-sm); background: rgba(255,255,255,.5); font-size: 14px; color: var(--ink); line-height: 1.55; text-align: left; }
+  html[data-theme="dark"] .cycle-msg { background: var(--cream-2); }
+  .cycle-msg.pms { background: linear-gradient(135deg,#FBE4E4,#F7D2D6); color: #8a4a55; }
+  html[data-theme="dark"] .cycle-msg.pms { background: #3a2529; color: #F0A6B0; }
+  .cycle-empty { text-align: center; padding: 10px; }
+  .cycle-empty p { color: var(--ink-2); font-size: 14px; margin-top: 8px; line-height: 1.6; }
+
+  /* Confetti */
+  .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 300; overflow: hidden; }
+  .confetti i { position: absolute; top: -20px; width: 10px; height: 14px; border-radius: 2px; opacity: .9; animation: confetti-fall 2.8s linear forwards; }
+  @keyframes confetti-fall { 0% { transform: translateY(-20px) rotate(0); opacity: 1; } 100% { transform: translateY(110vh) rotate(var(--r,360deg)); opacity: .5; } }
+
+  /* Calorie line */
+  .cal-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--cream-2); flex-wrap: wrap; }
+  .cal-label { font-size: 12.5px; color: var(--ink-2); display: block; }
+  .cal-val { font-size: 20px; font-weight: 700; color: var(--rose-deep); }
+  .cal-line i { font-style: normal; font-size: 11.5px; color: var(--muted); flex-basis: 100%; }
+
+  /* Off-plan joke */
+  .fv-joke { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.45); font-style: italic; font-size: 13.5px; color: var(--rose-deep); line-height: 1.5; }
+  html[data-theme="dark"] .fv-joke { background: rgba(255,255,255,0.06); }
+
+  /* Date push */
+  .datepush-card { background: linear-gradient(160deg,#FDE7EE,#F7D5E0); text-align: center; }
+  html[data-theme="dark"] .datepush-card { background: var(--card); }
+  .date-goal { display: flex; align-items: center; gap: 12px; justify-content: center; margin: 8px 0 4px; }
+  .date-goal-num { font-size: 52px; font-weight: 800; color: var(--rose-deep); letter-spacing: -1.5px; line-height: 1; }
+  .date-goal-num span { font-size: 24px; font-weight: 600; color: var(--muted); }
+  .date-goal-lab { font-size: 13.5px; color: var(--ink-2); text-align: left; line-height: 1.3; }
+  .push-line { font-size: 14px; color: var(--ink); margin: 8px 0 14px; line-height: 1.5; }
+  .cta-row.two { display: flex; gap: 10px; flex-wrap: nowrap; align-items: stretch; }
+  .cta-row.two .btn { flex: 1; }
+
   @media (min-width: 600px) { .diet-grid { grid-template-columns: repeat(4,1fr); } }
   </style>
 </head>
