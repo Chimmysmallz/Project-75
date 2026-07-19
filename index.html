@@ -685,6 +685,22 @@
   .cta-row.two { display: flex; gap: 10px; flex-wrap: nowrap; align-items: stretch; }
   .cta-row.two .btn { flex: 1; }
 
+  /* Dating checklist */
+  .checks-title { font-size: 13px; font-weight: 700; color: var(--rose-deep); margin: 18px 0 8px; }
+  .checks { display: flex; flex-direction: column; gap: 8px; }
+  .check-row { display: flex; flex-direction: column; gap: 7px; padding: 11px 12px; background: var(--cream-2); border-radius: 12px; }
+  .check-q { font-size: 13.5px; font-weight: 600; }
+  .tri { display: flex; gap: 6px; }
+  .tri-btn { flex: 1; padding: 8px 4px; border-radius: 9px; background: var(--card); font-size: 12px; font-weight: 600; color: var(--ink-2); border: 1px solid var(--line); transition: all .15s; }
+  .tri-btn:active { transform: scale(.95); }
+  .tri-btn.on.yes { background: #7FB98C; color: #fff; border-color: transparent; }
+  .tri-btn.on.no { background: #E38AA0; color: #fff; border-color: transparent; }
+  .tri-btn.on.chk { background: #D8B36A; color: #fff; border-color: transparent; }
+  .dp-summary { display: flex; gap: 12px; margin-top: 8px; }
+  .ds { font-size: 12.5px; font-weight: 700; }
+  .ds.yes { color: #3E8E63; } .ds.no { color: #C46E82; } .ds.chk { color: #B98A3E; }
+  html[data-theme="dark"] .ds.yes { color: #9BD9B4; } html[data-theme="dark"] .ds.chk { color: #E0C07E; }
+
   @media (min-width: 600px) { .diet-grid { grid-template-columns: repeat(4,1fr); } }
   </style>
 </head>

@@ -134,7 +134,8 @@
     boundaries: ['Protect my evenings', 'No work after 7pm', 'Say no without guilt', 'Limit draining people', 'Phone away at dinner', 'No lending money I need', 'Rest without apologising', 'Reply when I have capacity'],
     gratitude: ['My health', 'My home', 'My work', 'A good friend', 'My family', 'God', 'A small win today', 'My body', 'Rest', 'This quiet moment'],
     focus: ['Lose 3kg', 'Save ₦500,000', 'Publish 4 videos', 'Write 20 pages', 'Finish a book chapter', 'Read 2 books', 'Go on 1 intentional date', 'No soda all month', 'Walk 4× a week', 'Meal-prep every Sunday'],
-    offplan: ['Chocolate', 'Cake', 'Office snacks', 'Soda', 'Biscuits', 'Ice cream', 'Fried food', 'Pizza', 'Chips', 'Bread', 'Sweets', 'Meat pie']
+    offplan: ['Chocolate', 'Cake', 'Office snacks', 'Soda', 'Biscuits', 'Ice cream', 'Fried food', 'Pizza', 'Chips', 'Bread', 'Sweets', 'Meat pie'],
+    checks: ['Respects women', 'Wants kids', 'Wants marriage', 'Emotionally available', 'Financially responsible', 'Shares my faith', 'Ambitious / driven', 'Kind to family & staff', 'Communicates honestly', 'Makes time for me', 'No deal-breakers', 'Similar values', 'Wants the same number of kids', 'Health-conscious', 'Emotionally mature']
   };
 
   /* Rough calorie estimates for off-plan foods (per typical serving) */
@@ -466,8 +467,19 @@
     const subsTotal = (w.subscriptions || []).reduce(function (a, s) { return a + (Number(s.amount) || 0); }, 0);
     const rentPct = (w.rentGoal && w.rentGoal > 0) ? Math.min(100, Math.round((w.rentSavings / w.rentGoal) * 100)) : 0;
     const spend = M.monthly().intentionalSpend;
+    ensure(w, 'expenses', []);
+    const today = Dates.today(), mk = M.currentMonthKey();
+    const todaySpent = w.expenses.filter(function (e) { return e.date === today; }).reduce(function (a, e) { return a + (Number(e.amount) || 0); }, 0);
+    const monthSpent = w.expenses.filter(function (e) { return Dates.monthKey(e.date) === mk; }).reduce(function (a, e) { return a + (Number(e.amount) || 0); }, 0);
+    const budget = w.monthlyBudget || 0, overBudget = budget > 0 && monthSpent > budget;
+    const budgetPct = budget > 0 ? Math.min(100, Math.round((monthSpent / budget) * 100)) : 0;
+    const recentExp = w.expenses.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 12);
     return `
       ${card(`${sectionTitle('The money page', `<button class="add-btn" data-act="edit-money">✎</button>`)}${tile('Salary', money(w.salary), 'monthly', 'wide')}`)}
+      ${card(`${sectionTitle('Daily expenses', `<button class="add-btn" data-act="add-expense">＋</button>`)}
+        <div class="weight-grid"><div>${tile('Spent today', money(todaySpent))}</div><div>${tile('This month', money(monthSpent))}</div></div>
+        ${budget > 0 ? `<div class="rent-bar" style="margin-top:12px"><div class="rent-fill" style="width:${budgetPct}%${overBudget ? ';background:#E38AA0' : ''}"></div></div><div class="muted small">${overBudget ? ('Over budget by ' + money(monthSpent - budget) + '. Gently — the next choice resets it.') : (money(budget - monthSpent) + ' left of your ' + money(budget) + ' monthly budget')}</div>` : `<p class="muted small">Set a monthly budget (✎ above) to see what’s left each month.</p>`}
+        ${recentExp.length ? `<div class="rows" style="margin-top:12px">` + recentExp.map(function (e) { return `<div class="row"><div><b>${money(e.amount)}</b><i>${esc(Dates.prettyShort(e.date))} · ${esc(e.category || 'Other')}${e.note ? ' · ' + esc(e.note) : ''}</i></div><button class="nn-del" data-act="del-expense" data-id="${e.id}">✕</button></div>`; }).join('') + `</div>` : listEmpty('No expenses logged yet. Track daily to spend on purpose.')}`)}
       ${card(`${sectionTitle('Rent goal')}<div class="rent-top"><span>${money(w.rentSavings)}</span><span class="muted">of ${money(w.rentGoal)}</span></div>
         <div class="rent-bar"><div class="rent-fill" style="width:${rentPct}%"></div></div><div class="muted small">${rentPct}% saved toward next year’s rent.</div>`)}
       ${card(`${sectionTitle('Funds & envelopes')}<div class="funds-grid">${tile('Emergency', money(w.emergencyFund))}${tile('Car fund', money(w.carFund))}${tile('Transport', money(w.transport))}${tile('Food', money(w.food))}${tile('Gifts', money(w.gifts))}${tile('Perfume', money(w.perfumeFund))}</div>`)}
@@ -482,13 +494,55 @@
     return listBlock(title, addAct, S.get().love[key], function (x) { return `<div class="row"><div><b>${esc(x.text)}</b><i>${esc(Dates.prettyShort(x.date))}</i></div><button class="nn-del" data-act="del-love" data-key="${key}" data-id="${x.id}">✕</button></div>`; }, emptyMsg);
   }
 
+  const DEFAULT_CHECKS = ['Respects women', 'Emotionally available', 'Consistent (not hot & cold)', 'Communicates honestly', 'Financially responsible', 'Ambitious / driven', 'Kind to others', 'Shares my values', 'Wants marriage', 'Wants kids', 'Makes time for me', 'No deal-breakers so far'];
   function ensureDating(st) {
-    const L = st.love; if (!L.dating2) L.dating2 = { standards: [], green: [], red: [], people: [], dates: [], goal: 2 };
+    const L = st.love; if (!L.dating2) L.dating2 = { standards: [], green: [], red: [], people: [], dates: [], goal: 2, checks: [] };
     ['standards', 'green', 'red', 'people', 'dates'].forEach(function (k) { if (!L.dating2[k]) L.dating2[k] = []; });
     if (L.dating2.goal == null) L.dating2.goal = 2;
+    if (!L.dating2.checks || !L.dating2.checks.length) L.dating2.checks = DEFAULT_CHECKS.map(function (t) { return { id: S.uid(), label: t }; });
     return L.dating2;
   }
   const DATE_IDEAS = ['Coffee somewhere beautiful', 'A gallery or museum', 'A sunset walk', 'Try a new restaurant', 'Cook a meal together', 'Live music', 'Browse a bookshop', 'Board games & mocktails', 'The beach or waterfront', 'A farmers’ market', 'A dessert date', 'A class together — pottery, dance, art', 'A picnic', 'A spa afternoon (a solo date counts!)'];
+  function datePersonSheet(person) {
+    const st = S.get(); const d = ensureDating(st);
+    const p = person || {}; const answers = Object.assign({}, p.answers || {});
+    const opt = function (s, sel) { return `<option ${sel === s ? 'selected' : ''}>${s}</option>`; };
+    const profile =
+      `<label class="fld"><span>Name</span><input name="name" value="${esc(p.name || '')}" placeholder="His name"></label>
+       <label class="fld"><span>Status</span><select name="status">${['Talking', 'Dating', 'Paused', 'Ended'].map(function (s) { return opt(s, p.status || 'Talking'); }).join('')}</select></label>
+       <label class="fld"><span>Birthday</span><input name="birthday" type="date" value="${esc(p.birthday || '')}"></label>
+       <label class="fld"><span>State of origin</span><input name="origin" value="${esc(p.origin || '')}" placeholder="e.g. Anambra"></label>
+       <label class="fld"><span>Likes / interests</span><input name="likes" value="${esc(p.likes || '')}" placeholder="e.g. football, travel, jollof"></label>
+       <label class="fld"><span>Kids — wants them? how many?</span><input name="kids" value="${esc(p.kids || '')}" placeholder="e.g. Yes, 3"></label>
+       <label class="fld"><span>Notes</span><textarea name="notes" rows="3" placeholder="Anything worth remembering">${esc(p.notes || '')}</textarea></label>`;
+    const checksHTML = `<div class="checks-title">Does he meet your standards?</div><div class="checks">` + d.checks.map(function (c) {
+      const a = answers[c.id] || '';
+      return `<div class="check-row"><span class="check-q">${esc(c.label)}</span><div class="tri" data-check="${c.id}"><button type="button" data-val="yes" class="tri-btn ${a === 'yes' ? 'on yes' : ''}">Yes</button><button type="button" data-val="checking" class="tri-btn ${a === 'checking' ? 'on chk' : ''}">Checking</button><button type="button" data-val="no" class="tri-btn ${a === 'no' ? 'on no' : ''}">No</button></div></div>`;
+    }).join('') + `</div><p class="muted small">Add or remove questions from the “Questions I’m checking” card.</p>`;
+    const ov = openSheet({
+      title: person ? (p.name || 'Edit') : 'Someone I’m seeing', subtitle: 'His details — and how he measures up.',
+      bodyHTML: profile + checksHTML, submitLabel: person ? 'Save' : 'Add him',
+      onSubmit: function (v) {
+        S.mutate(function () {
+          const dd = ensureDating(st);
+          if (person) { person.name = v.name || person.name; person.status = v.status; person.birthday = v.birthday || ''; person.origin = v.origin || ''; person.likes = v.likes || ''; person.kids = v.kids || ''; person.notes = v.notes || ''; person.answers = answers; }
+          else { dd.people.push({ id: S.uid(), name: v.name || 'Someone', status: v.status || 'Talking', birthday: v.birthday || '', origin: v.origin || '', likes: v.likes || '', kids: v.kids || '', notes: v.notes || '', answers: answers }); }
+        });
+        closeSheet(); render();
+      }
+    });
+    $$('.tri', ov).forEach(function (tri) {
+      const cid = tri.getAttribute('data-check');
+      $$('.tri-btn', tri).forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const val = btn.getAttribute('data-val');
+          answers[cid] = (answers[cid] === val) ? '' : val;
+          $$('.tri-btn', tri).forEach(function (b) { b.classList.remove('on', 'yes', 'no', 'chk'); });
+          if (answers[cid]) btn.classList.add('on', val === 'yes' ? 'yes' : val === 'no' ? 'no' : 'chk');
+        });
+      });
+    });
+  }
   function datesThisMonth() { const d = S.get().love.dating2; if (!d || !d.dates) return 0; const mk = M.currentMonthKey(); return d.dates.filter(function (x) { return Dates.monthKey(x.date) === mk; }).length; }
   function dateNudge() {
     const d = S.get().love && S.get().love.dating2; if (!d) return '';
@@ -528,13 +582,19 @@
         <div class="flag-group"><div class="flag-head red"><span>Deal-breakers</span><button class="add-btn" data-act="add-red">＋</button></div>
           <div class="dchips">${chips(d.red, 'del-red', 'What you walk away from.')}</div></div>`)}
 
+      ${card(`${sectionTitle('Questions I’m checking', `<button class="add-btn" data-act="add-check">＋</button>`)}
+        <p class="muted small">The things you check each person against — you’ll answer Yes / No / Still checking on his card.</p>
+        <div class="dchips">${d.checks && d.checks.length ? d.checks.map(function (c) { return `<span class="dchip">${esc(c.label)}<button data-act="del-check" data-id="${c.id}" aria-label="remove">✕</button></span>`; }).join('') : `<span class="muted small">Add questions to check for.</span>`}</div>`)}
+
       ${card(`${sectionTitle('People I’m seeing', addBtn('add-date-person'))}
-        <p class="muted small">Hold each one up to your standards. Is this intentional — or filling a void?</p>
+        <p class="muted small">Tap someone to fill in his details and check him against your standards.</p>
         ${d.people.length ? `<div class="date-people">` + d.people.map(function (p) {
+          const ans = p.answers || {}; let yes = 0, no = 0, chk = 0; Object.keys(ans).forEach(function (k) { const a = ans[k]; if (a === 'yes') yes++; else if (a === 'no') no++; else if (a === 'checking') chk++; });
+          const sub = [p.origin, p.likes].filter(Boolean).join(' · ');
           return `<div class="date-person"><button class="dp-main" data-act="edit-date-person" data-id="${p.id}">
             <div class="dp-top"><b>${esc(p.name)}</b><span class="dp-status s-${STATUS[p.status] || 'talking'}">${esc(p.status || 'Talking')}</span></div>
-            ${p.notes ? `<div class="dp-notes">${esc(p.notes)}</div>` : ''}
-            <div class="dp-reflect">Do they meet your standards?</div></button>
+            ${sub ? `<div class="dp-notes">${esc(sub)}</div>` : ''}
+            <div class="dp-summary"><span class="ds yes">✓ ${yes}</span><span class="ds no">✕ ${no}</span><span class="ds chk">? ${chk}</span></div></button>
             <button class="nn-del" data-act="del-date-person" data-id="${p.id}">✕</button></div>`;
         }).join('') + `</div>` : listEmpty('No one yet — and that’s perfectly fine. Intentional means unhurried.')}`)}
 
@@ -898,8 +958,10 @@
       case 'del-green': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.green = d.green.filter(function (x) { return x.id !== id; }); }); render(); return true; }
       case 'add-red': openPicker({ title: 'Deal-breakers', suggestions: SUGGEST.red, onAdd: function (t) { S.mutate(function () { ensureDating(st).red.push({ id: S.uid(), text: t }); }); } }); return true;
       case 'del-red': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.red = d.red.filter(function (x) { return x.id !== id; }); }); render(); return true; }
-      case 'add-date-person': openSheet({ title: 'Someone I’m seeing', fields: [{ name: 'name', label: 'Name' }, { name: 'status', label: 'Status', type: 'select', options: ['Talking', 'Dating', 'Paused', 'Ended'], value: 'Talking' }, { name: 'notes', label: 'How do they meet your standards?', type: 'textarea', rows: 3 }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { ensureDating(st).people.push({ id: S.uid(), name: v.name, status: v.status || 'Talking', notes: v.notes || '' }); }); closeSheet(); render(); } }); return true;
-      case 'edit-date-person': { const id = el.getAttribute('data-id'); const p = ensureDating(st).people.find(function (x) { return x.id === id; }); if (!p) return true; openSheet({ title: p.name, subtitle: 'Honest notes. This is for you.', fields: [{ name: 'name', label: 'Name', value: p.name }, { name: 'status', label: 'Status', type: 'select', options: ['Talking', 'Dating', 'Paused', 'Ended'], value: p.status }, { name: 'notes', label: 'How do they meet your standards?', type: 'textarea', rows: 4, value: p.notes }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { p.name = v.name || p.name; p.status = v.status; p.notes = v.notes; }); closeSheet(); render(); } }); return true; }
+      case 'add-date-person': datePersonSheet(null); return true;
+      case 'edit-date-person': { const p = ensureDating(st).people.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (p) datePersonSheet(p); return true; }
+      case 'add-check': openPicker({ title: 'Questions to check', subtitle: 'Tap to add — or write your own.', suggestions: SUGGEST.checks, onAdd: function (t) { S.mutate(function () { ensureDating(st).checks.push({ id: S.uid(), label: t }); }); } }); return true;
+      case 'del-check': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.checks = d.checks.filter(function (x) { return x.id !== id; }); }); render(); return true; }
       case 'del-date-person': { const id = el.getAttribute('data-id'); S.mutate(function () { const d = ensureDating(st); d.people = d.people.filter(function (x) { return x.id !== id; }); }); render(); return true; }
 
       case 'go-dating': go('resets'); App.seg.resets = 'dating'; render(); return true;
@@ -917,6 +979,8 @@
       case 'note-offplan': openPicker({ title: 'What did you have?', subtitle: 'Tap it. No judgement — just the truth.', suggestions: SUGGEST.offplan, onAdd: function (t) { S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: t, verdict: 'no', cal: calFor(t) }); }); }, onDone: graceSheet }); return true;
 
       case 'edit-money': openSheet({ title: 'The money page', fields: [{ name: 'salary', label: 'Salary (₦)', type: 'number', value: st.wealth.salary }, { name: 'rentGoal', label: 'Rent goal (₦)', type: 'number', value: st.wealth.rentGoal }, { name: 'rentSavings', label: 'Rent saved so far (₦)', type: 'number', value: st.wealth.rentSavings }, { name: 'emergencyFund', label: 'Emergency fund (₦)', type: 'number', value: st.wealth.emergencyFund }, { name: 'carFund', label: 'Car fund (₦)', type: 'number', value: st.wealth.carFund }, { name: 'transport', label: 'Transport (₦)', type: 'number', value: st.wealth.transport }, { name: 'food', label: 'Food (₦)', type: 'number', value: st.wealth.food }, { name: 'gifts', label: 'Gifts (₦)', type: 'number', value: st.wealth.gifts }, { name: 'perfumeFund', label: 'Perfume fund (₦)', type: 'number', value: st.wealth.perfumeFund }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { const w = st.wealth; w.salary = num(v.salary); w.rentGoal = num(v.rentGoal); w.rentSavings = num(v.rentSavings) || 0; w.emergencyFund = num(v.emergencyFund) || 0; w.carFund = num(v.carFund) || 0; w.transport = num(v.transport) || 0; w.food = num(v.food) || 0; w.gifts = num(v.gifts) || 0; w.perfumeFund = num(v.perfumeFund) || 0; }); closeSheet(); render(); } }); return true;
+      case 'add-expense': openSheet({ title: 'Add expense', subtitle: 'What did you spend?', fields: [{ name: 'amount', label: 'Amount (₦)', type: 'number' }, { name: 'category', label: 'Category', type: 'select', options: ['Transport', 'Food', 'Gifts', 'Airtime / Data', 'Shopping', 'Bills', 'Health', 'Fun', 'Other'] }, { name: 'note', label: 'Note (optional)' }, { name: 'date', label: 'Date', type: 'date', value: Dates.today() }], submitLabel: 'Add', onSubmit: function (v) { const amt = num(v.amount); if (!amt) { toast('Enter an amount.'); return; } S.mutate(function () { ensure(st.wealth, 'expenses', []); st.wealth.expenses.push({ id: S.uid(), date: v.date || Dates.today(), amount: amt, category: v.category || 'Other', note: v.note || '' }); }); closeSheet(); render(); } }); return true;
+      case 'del-expense': { const id = el.getAttribute('data-id'); S.mutate(function () { st.wealth.expenses = (st.wealth.expenses || []).filter(function (x) { return x.id !== id; }); }); render(); return true; }
       case 'add-sub': openSheet({ title: 'Subscription', fields: [{ name: 'name', label: 'Name' }, { name: 'amount', label: 'Monthly (₦)', type: 'number' }], submitLabel: 'Add', onSubmit: function (v) { if (v.name) S.mutate(function () { st.wealth.subscriptions.push({ id: S.uid(), name: v.name, amount: num(v.amount) || 0 }); }); closeSheet(); render(); } }); return true;
       case 'del-sub': S.mutate(function () { st.wealth.subscriptions = st.wealth.subscriptions.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); return true;
       case 'add-fgoal': openSheet({ title: 'Financial goal', fields: [{ name: 'title', label: 'Goal' }, { name: 'target', label: 'Target (₦, optional)', type: 'number' }], submitLabel: 'Add', onSubmit: function (v) { if (v.title) S.mutate(function () { st.wealth.goals.push({ id: S.uid(), title: v.title, target: num(v.target), done: false }); }); closeSheet(); render(); } }); return true;

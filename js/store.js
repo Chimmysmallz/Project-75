@@ -85,7 +85,7 @@
       wealth: {
         salary: null, rentGoal: null, rentSavings: 0, emergencyFund: 0, monthlyBudget: 0, investments: 0,
         transport: 0, food: 0, gifts: 0, carFund: 0, perfumeFund: 0,
-        subscriptions: [], goals: [], spending: []
+        subscriptions: [], goals: [], spending: [], expenses: []
       },
       love: {
         commitments: [
