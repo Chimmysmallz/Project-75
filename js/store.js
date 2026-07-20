@@ -133,7 +133,7 @@
       cycle: { periods: [], avgCycle: 28, avgPeriod: 5 },
       vision: [],
       achievements: {},
-      settings: { theme: 'system', reminders: false, reminderTime: '07:30', lastOpen: start, onboarded: false, seeded: false }
+      settings: { theme: 'system', skin: 'rose', bgMediaId: null, reminders: false, reminderTime: '07:30', lastOpen: start, onboarded: false, seeded: false }
     };
   }
 

@@ -701,6 +701,44 @@
   .ds.yes { color: #3E8E63; } .ds.no { color: #C46E82; } .ds.chk { color: #B98A3E; }
   html[data-theme="dark"] .ds.yes { color: #9BD9B4; } html[data-theme="dark"] .ds.chk { color: #E0C07E; }
 
+  /* ===== Theme skins (accent palettes) ===== */
+  html[data-skin="lavender"] { --rose:#B79FD4; --rose-soft:#D9C7EC; --rose-deep:#8A6DB0; --mauve:#B79FD4; --blush:#F0E9F7; --grad: linear-gradient(135deg,#D9C7EC,#B79FD4); }
+  html[data-skin="sage"] { --rose:#9CBFA3; --rose-soft:#C4DCC8; --rose-deep:#6E9478; --mauve:#9CBFA3; --blush:#E7F0E9; --grad: linear-gradient(135deg,#C4DCC8,#9CBFA3); }
+  html[data-skin="champagne"] { --rose:#D6B36A; --rose-soft:#EBD8AC; --rose-deep:#B08D45; --mauve:#D6B36A; --blush:#F5EEDD; --grad: linear-gradient(135deg,#EBD8AC,#D6B36A); }
+  html[data-theme="dark"][data-skin="lavender"] { --blush:#2a2233; }
+  html[data-theme="dark"][data-skin="sage"] { --blush:#20291f; }
+  html[data-theme="dark"][data-skin="champagne"] { --blush:#2c2820; }
+
+  .skin-label { font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 16px 0 8px; }
+  .skins { display: flex; gap: 10px; flex-wrap: wrap; }
+  .skin-swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-2); padding: 4px; }
+  .skin-swatch span { width: 36px; height: 36px; border-radius: 50%; box-shadow: var(--shadow-sm); border: 2px solid transparent; transition: transform .15s; }
+  .skin-swatch:active span { transform: scale(.9); }
+  .skin-swatch.on { color: var(--ink); font-weight: 700; }
+  .skin-swatch.on span { border-color: var(--ink); }
+  .skin-swatch.sk-rose span { background: linear-gradient(135deg,#F3B7C6,#E38AA0); }
+  .skin-swatch.sk-lavender span { background: linear-gradient(135deg,#D9C7EC,#B79FD4); }
+  .skin-swatch.sk-sage span { background: linear-gradient(135deg,#C4DCC8,#9CBFA3); }
+  .skin-swatch.sk-champagne span { background: linear-gradient(135deg,#EBD8AC,#D6B36A); }
+
+  /* ===== Garden ===== */
+  .garden-card { text-align: center; background: linear-gradient(160deg, var(--blush), var(--card)); }
+  .garden-plant { font-size: 60px; animation: sway 4s ease-in-out infinite; display: inline-block; }
+  @keyframes sway { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+  .garden-name { font-family: var(--serif); font-size: 20px; font-weight: 600; margin-top: 4px; }
+  .garden-bar { height: 10px; border-radius: 6px; background: var(--cream-2); overflow: hidden; margin: 12px auto 6px; max-width: 260px; }
+  .garden-fill { height: 100%; background: var(--grad); border-radius: 6px; transition: width 1s ease; }
+  .garden-next { font-size: 12.5px; color: var(--ink-2); }
+  .garden-msg { font-family: var(--serif); font-style: italic; font-size: 15px; color: var(--rose-deep); margin-top: 10px; }
+  .garden-foot { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+
+  /* ===== Home photo background ===== */
+  .agreement-card.has-bg { background-size: cover; background-position: center; }
+  .agreement-card.has-bg .agree-hi, .agreement-card.has-bg .agree-welcome, .agreement-card.has-bg .agree-label, .agreement-card.has-bg .agree-list li, .agreement-card.has-bg .agree-seal { color: #fff; }
+  .agreement-card.has-bg .agree-list li::before { color: #fff; }
+  .agreement-card.has-bg .agree-seal { background: rgba(255,255,255,0.2); }
+  .agreement-card.has-bg .return-banner { background: rgba(255,255,255,0.22); color: #fff; }
+
   @media (min-width: 600px) { .diet-grid { grid-template-columns: repeat(4,1fr); } }
   </style>
 </head>

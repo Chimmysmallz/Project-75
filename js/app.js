@@ -154,6 +154,33 @@
   function graceSheet() {
     openSheet({ title: 'Noted — no shame.', subtitle: 'Honesty is the whole practice.', bodyHTML: `<div class="wait-water"><div class="wait-emoji">🤍</div><p>One meal is not the story. You didn’t fail — you noticed, and you told the truth. Your next choice is a clean slate. Drink some water, and continue.</p></div>`, submitLabel: 'Continue', onSubmit: closeSheet });
   }
+  /* Accurate off-plan logging: asks quantity, lets her edit the calories. */
+  function logOffPlanSheet(prefillItem) {
+    const chips = SUGGEST.offplan.map(function (s) { return `<button type="button" class="pick-chip" data-food="${esc(s)}">${esc(s)}</button>`; }).join('');
+    const ov = openSheet({
+      title: 'Note what you ate', subtitle: 'No judgement — let’s just be accurate.',
+      bodyHTML: `<div class="pick-wrap">${chips}</div>
+        <label class="fld"><span>Food</span><input name="item" id="op-item" value="${esc(prefillItem || '')}" placeholder="e.g. cake"></label>
+        <label class="fld"><span>How many servings?</span><input name="qty" id="op-qty" type="number" step="0.5" min="0" value="1"></label>
+        <label class="fld"><span>Calories — edit if you know better</span><input name="cal" id="op-cal" type="number" min="0" placeholder="tap a food or type"></label>
+        <p class="muted small">The number is only a rough guess per serving. Change it to whatever’s realistic — you know best.</p>`,
+      submitLabel: 'Log it',
+      onSubmit: function (v) {
+        const item = (v.item || '').trim(); if (!item) { toast('What did you have?'); return; }
+        const qty = num(v.qty) || 1, cal = num(v.cal);
+        S.mutate(function () { S.get().foodLog.push({ id: S.uid(), date: Dates.today(), item: (qty !== 1 ? (qty + '× ') : '') + item, verdict: 'no', cal: cal != null ? cal : Math.round(calFor(item) * qty) }); });
+        closeSheet(); render(); graceSheet();
+      }
+    });
+    const itemEl = $('#op-item', ov), qtyEl = $('#op-qty', ov), calEl = $('#op-cal', ov);
+    let calEdited = false;
+    calEl.addEventListener('input', function () { calEdited = true; });
+    function suggest() { if (calEdited) return; const t = (itemEl.value || '').trim(); if (!t) { calEl.value = ''; return; } const q = parseFloat(qtyEl.value) || 1; calEl.value = Math.round(calFor(t) * q); }
+    $$('.pick-chip', ov).forEach(function (b) { b.addEventListener('click', function () { itemEl.value = b.getAttribute('data-food'); calEdited = false; suggest(); }); });
+    itemEl.addEventListener('input', suggest);
+    qtyEl.addEventListener('input', suggest);
+    if (prefillItem) suggest();
+  }
 
   /* Daily reminder schedule (fires while the app is open/installed) */
   const REMINDERS = [
@@ -190,6 +217,36 @@
     function addCustom() { const t = (inp.value || '').trim(); if (!t) return; cfg.onAdd(t); inp.value = ''; const chip = document.createElement('span'); chip.className = 'pick-chip added'; chip.textContent = '✓ ' + t; wrap.appendChild(chip); }
     $('#pick-add', ov).addEventListener('click', addCustom);
     inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } });
+  }
+
+  /* A garden that grows with every promise-day and never dies. */
+  const GARDEN_STAGES = [
+    { min: 0, emoji: '🌱', name: 'A seed', msg: 'Every promise you keep is water. Begin.' },
+    { min: 3, emoji: '🌿', name: 'A sprout', msg: 'Something is growing. Keep going.' },
+    { min: 7, emoji: '🌷', name: 'A bud', msg: 'Almost blooming. She’s in there.' },
+    { min: 14, emoji: '🌸', name: 'In bloom', msg: 'Look at you — blossoming.' },
+    { min: 30, emoji: '💐', name: 'A bouquet', msg: 'A month of showing up. Beautiful.' },
+    { min: 60, emoji: '🌺', name: 'A garden', msg: 'You built a whole garden, softly.' },
+    { min: 120, emoji: '🏡', name: 'A blooming home', msg: 'This is her life now.' }
+  ];
+  function gardenCard() {
+    const count = M.keptDaysTotal();
+    let cur = GARDEN_STAGES[0], nextS = null;
+    for (let i = 0; i < GARDEN_STAGES.length; i++) { if (count >= GARDEN_STAGES[i].min) { cur = GARDEN_STAGES[i]; nextS = GARDEN_STAGES[i + 1] || null; } }
+    const pct = nextS ? Math.round(((count - cur.min) / (nextS.min - cur.min)) * 100) : 100;
+    const remain = nextS ? (nextS.min - count) : 0;
+    return card(`<div class="garden">
+      <div class="garden-plant">${cur.emoji}</div>
+      <div class="garden-name">${cur.name}</div>
+      ${nextS ? `<div class="garden-bar"><div class="garden-fill" style="width:${pct}%"></div></div><div class="garden-next">${remain} more promise-day${remain === 1 ? '' : 's'} to ${nextS.name.toLowerCase()}</div>` : `<div class="garden-next">Fully grown, and still growing with you. 🤍</div>`}
+      <div class="garden-msg">${esc(cur.msg)}</div>
+      <div class="garden-foot">It grows each day you keep a promise. It never dies — it just waits for you.</div>
+    </div>`, 'garden-card');
+  }
+  function applyHomeBg() {
+    const st = S.get(); if (!st.settings.bgMediaId) return;
+    const el = $('.agreement-card'); if (!el) return;
+    Media.url(st.settings.bgMediaId).then(function (u) { if (u) { el.classList.add('has-bg'); el.style.backgroundImage = `linear-gradient(180deg, rgba(35,22,28,0.30), rgba(35,22,28,0.62)), url(${u})`; } });
   }
 
   /* ============================ Diet ============================ */
@@ -281,6 +338,8 @@
 
       ${card(`<div class="today-top">${ringHTML}<div class="today-stats">
         ${tile('Promise Score', score + '%', 'last 30 days')}${tile('Streak', streak + (streak === 1 ? ' day' : ' days'), 'gently counted')}</div></div>`, 'today-hero')}
+
+      ${gardenCard()}
 
       ${card(`${sectionTitle('Daily tracker')}<div class="track-list">${dailyRows}</div>
         <div class="track-divider">And for her heart</div><div class="track-list">${soulRows}</div>
@@ -720,7 +779,13 @@
         <div class="row"><div><b>Name</b><i>${esc(st.profile.name)}</i></div><button class="chip-btn" data-act="edit-profile">Edit</button></div>
         <div class="row"><div><b>Height</b><i>${st.profile.heightCm} cm</i></div></div>
         <div class="row"><div><b>Journey</b><i>${st.profile.startWeight}kg → ${st.profile.goalWeight}kg · ${st.profile.targetMonths || 6} months</i></div></div></div>`)}
-      ${card(`${sectionTitle('Appearance')}<div class="segmented" data-seg="theme">${['system', 'light', 'dark'].map(function (t) { return `<button class="${s.theme === t ? 'on' : ''}" data-act="set-theme" data-val="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`; }).join('')}</div>`)}
+      ${card(`${sectionTitle('Appearance')}
+        <div class="segmented" data-seg="theme">${['system', 'light', 'dark'].map(function (t) { return `<button class="${s.theme === t ? 'on' : ''}" data-act="set-theme" data-val="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`; }).join('')}</div>
+        <div class="skin-label">Colour</div>
+        <div class="skins">${[['rose', 'Rose'], ['lavender', 'Lavender'], ['sage', 'Sage'], ['champagne', 'Champagne']].map(function (k) { return `<button class="skin-swatch sk-${k[0]} ${(s.skin || 'rose') === k[0] ? 'on' : ''}" data-act="set-skin" data-val="${k[0]}"><span></span>${k[1]}</button>`; }).join('')}</div>
+        <div class="skin-label">Home background</div>
+        <div class="report-btns"><button class="btn ghost" data-act="choose-bg">${s.bgMediaId ? 'Change photo' : 'Choose photo'}</button>${s.bgMediaId ? `<button class="btn ghost" data-act="remove-bg">Remove</button>` : ''}</div>
+        <p class="muted small">Your own photo, behind your morning greeting.</p>`)}
       ${card(`${sectionTitle('Daily reminders')}<label class="switch-row"><span>Turn on reminders</span><button class="switch ${s.reminders ? 'on' : ''}" data-act="toggle-reminders" role="switch" aria-checked="${s.reminders}"></button></label>
         <div class="reminder-schedule">${REMINDERS.map(function (r) { return `<div class="rem-row"><span class="rem-time">${r.time}</span><span class="rem-text">${esc(r.title)}</span></div>`; }).join('')}</div>
         <p class="muted small">These pop up while the app is open or installed on your home screen. For pings even when the app is closed, I can also send them to your Teams — just ask.</p>`)}
@@ -746,6 +811,7 @@
     if (routeChanged) view.classList.remove('enter');
     view.innerHTML = (VIEWS[App.route] || viewToday)();
     loadMediaImages(view); renderTabs(); updatePanic();
+    if (App.route === 'today') applyHomeBg();
     if (routeChanged) {
       // New screen: play the entrance animation and start at the top.
       requestAnimationFrame(function () { view.classList.add('enter'); Charts.animateIn(view); });
@@ -896,7 +962,7 @@
 
       case 'food-check': { const q = $('#food-input') ? $('#food-input').value : ''; runFoodCheck(q); break; }
       case 'food-quick': { const q = el.getAttribute('data-q'), inp = $('#food-input'); if (inp) inp.value = q; runFoodCheck(q); break; }
-      case 'food-log': { const verdict = el.getAttribute('data-verdict'), item = el.getAttribute('data-item'); S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: item, verdict: verdict, cal: verdict === 'no' ? calFor(item) : null }); }); App.seg.body = 'food'; render(); toast(verdict === 'no' ? 'Noted — no shame. Your next choice is a clean slate.' : 'Noted honestly.'); break; }
+      case 'food-log': { const verdict = el.getAttribute('data-verdict'), item = el.getAttribute('data-item'); if (verdict === 'no') { logOffPlanSheet(item); } else { S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: item, verdict: verdict, cal: null }); }); App.seg.body = 'food'; render(); toast('Noted honestly.'); } break; }
 
       case 'toggle-nn': S.mutate(function () { const n = st.nonNegotiables.find(function (x) { return x.id === el.getAttribute('data-id'); }); if (n) n.active = !n.active; }); render(); break;
       case 'del-nn': S.mutate(function () { st.nonNegotiables = st.nonNegotiables.filter(function (x) { return x.id !== el.getAttribute('data-id'); }); }); render(); break;
@@ -976,7 +1042,7 @@
       case 'add-vision': pickImage(async function (blob) { const mid = await Media.put(blob, { type: blob.type }); S.mutate(function () { ensure(st, 'vision', []); st.vision.push({ id: S.uid(), date: Dates.today(), mediaId: mid }); }); render(); toast('Added to your vision board. 🤍'); }); return true;
       case 'del-vision': { const id = el.getAttribute('data-id'), mid = el.getAttribute('data-mid'); confirmSheet('Remove this image?', '', 'Remove', function () { Media.del(mid); S.mutate(function () { st.vision = (st.vision || []).filter(function (x) { return x.id !== id; }); }); render(); }, true); return true; }
       case 'share-progress': shareProgress(); return true;
-      case 'note-offplan': openPicker({ title: 'What did you have?', subtitle: 'Tap it. No judgement — just the truth.', suggestions: SUGGEST.offplan, onAdd: function (t) { S.mutate(function () { st.foodLog.push({ id: S.uid(), date: Dates.today(), item: t, verdict: 'no', cal: calFor(t) }); }); }, onDone: graceSheet }); return true;
+      case 'note-offplan': logOffPlanSheet(''); return true;
 
       case 'edit-money': openSheet({ title: 'The money page', fields: [{ name: 'salary', label: 'Salary (₦)', type: 'number', value: st.wealth.salary }, { name: 'rentGoal', label: 'Rent goal (₦)', type: 'number', value: st.wealth.rentGoal }, { name: 'rentSavings', label: 'Rent saved so far (₦)', type: 'number', value: st.wealth.rentSavings }, { name: 'emergencyFund', label: 'Emergency fund (₦)', type: 'number', value: st.wealth.emergencyFund }, { name: 'carFund', label: 'Car fund (₦)', type: 'number', value: st.wealth.carFund }, { name: 'transport', label: 'Transport (₦)', type: 'number', value: st.wealth.transport }, { name: 'food', label: 'Food (₦)', type: 'number', value: st.wealth.food }, { name: 'gifts', label: 'Gifts (₦)', type: 'number', value: st.wealth.gifts }, { name: 'perfumeFund', label: 'Perfume fund (₦)', type: 'number', value: st.wealth.perfumeFund }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { const w = st.wealth; w.salary = num(v.salary); w.rentGoal = num(v.rentGoal); w.rentSavings = num(v.rentSavings) || 0; w.emergencyFund = num(v.emergencyFund) || 0; w.carFund = num(v.carFund) || 0; w.transport = num(v.transport) || 0; w.food = num(v.food) || 0; w.gifts = num(v.gifts) || 0; w.perfumeFund = num(v.perfumeFund) || 0; }); closeSheet(); render(); } }); return true;
       case 'add-expense': openSheet({ title: 'Add expense', subtitle: 'What did you spend?', fields: [{ name: 'amount', label: 'Amount (₦)', type: 'number' }, { name: 'category', label: 'Category', type: 'select', options: ['Transport', 'Food', 'Gifts', 'Airtime / Data', 'Shopping', 'Bills', 'Health', 'Fun', 'Other'] }, { name: 'note', label: 'Note (optional)' }, { name: 'date', label: 'Date', type: 'date', value: Dates.today() }], submitLabel: 'Add', onSubmit: function (v) { const amt = num(v.amount); if (!amt) { toast('Enter an amount.'); return; } S.mutate(function () { ensure(st.wealth, 'expenses', []); st.wealth.expenses.push({ id: S.uid(), date: v.date || Dates.today(), amount: amt, category: v.category || 'Other', note: v.note || '' }); }); closeSheet(); render(); } }); return true;
@@ -1039,6 +1105,9 @@
 
       case 'edit-profile': openSheet({ title: 'You', fields: [{ name: 'name', label: 'Name', value: st.profile.name }, { name: 'heightCm', label: 'Height (cm)', type: 'number', value: st.profile.heightCm }, { name: 'goalWeight', label: 'Goal weight (kg)', type: 'number', step: '0.1', value: st.profile.goalWeight }, { name: 'targetMonths', label: 'Timeline (months)', type: 'number', value: st.profile.targetMonths || 6 }], submitLabel: 'Save', onSubmit: function (v) { S.mutate(function () { st.profile.name = v.name || st.profile.name; st.profile.heightCm = num(v.heightCm) || st.profile.heightCm; st.profile.goalWeight = num(v.goalWeight) || st.profile.goalWeight; st.profile.targetMonths = num(v.targetMonths) || st.profile.targetMonths; }); closeSheet(); render(); } }); break;
       case 'set-theme': S.mutate(function () { st.settings.theme = el.getAttribute('data-val'); }); applyTheme(); render(); break;
+      case 'set-skin': S.mutate(function () { st.settings.skin = el.getAttribute('data-val'); }); applyTheme(); render(); break;
+      case 'choose-bg': pickImage(async function (blob) { const mid = await Media.put(blob, { type: blob.type }); S.mutate(function () { st.settings.bgMediaId = mid; }); render(); toast('Home background set. 🤍'); }); break;
+      case 'remove-bg': { const old = st.settings.bgMediaId; S.mutate(function () { st.settings.bgMediaId = null; }); if (old) Media.del(old); render(); toast('Background removed.'); break; }
       case 'toggle-reminders': toggleReminders(); break;
       case 'export-data': Data.download(); toast('Backup downloaded.'); break;
       case 'import-data': doImport(); break;
@@ -1052,6 +1121,7 @@
     const t = S.get().settings.theme;
     const dark = t === 'dark' || (t === 'system' && global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-skin', S.get().settings.skin || 'rose');
     const meta = $('#theme-color'); if (meta) meta.setAttribute('content', dark ? '#171215' : '#fbf7f4');
   }
   function toggleReminders() {
